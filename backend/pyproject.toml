@@ -1,0 +1,14 @@
+[project]
+name = "hfos-backend"
+version = "0.1.0"
+description = "Household Financial Operating System — backend (FastAPI)"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

@@ -1,0 +1,46 @@
+# Production-parity local stack: PostgreSQL + FastAPI backend + Next.js frontend.
+# For the fastest possible start (SQLite, no Docker) see README "Quick start".
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hfos
+      POSTGRES_PASSWORD: hfos
+      POSTGRES_DB: hfos
+    ports:
+      - "5432:5432"
+    volumes:
+      - hfos_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hfos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://hfos:hfos@db:5432/hfos
+      HFOS_SECRET_KEY: change-me-in-real-deployments
+      HFOS_AUTO_CREATE_TABLES: "true"
+      HFOS_CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "python -m app.scripts.seed_db --if-empty &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+
+volumes:
+  hfos_pg:
