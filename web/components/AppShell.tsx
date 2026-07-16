@@ -47,8 +47,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen bg-surface">
       <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
         <div className="px-5 py-5">
-          <div className="text-lg font-bold text-brand-dark">HFOS</div>
-          <div className="text-xs text-ink-muted">Household Financial OS</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-full.png" alt="HFOS — Household Financial OS" className="h-auto w-44" />
         </div>
         <nav className="flex-1 space-y-1 px-3">
           {NAV.map((item) => {
@@ -84,7 +84,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3 md:hidden">
-          <span className="font-bold text-brand-dark">HFOS</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-full.png" alt="HFOS" className="h-7 w-auto" />
           <button onClick={() => { logout(); router.replace("/login"); }} className="text-xs underline">
             Sign out
           </button>

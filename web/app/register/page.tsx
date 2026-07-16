@@ -35,8 +35,9 @@ export default function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <div className="text-2xl font-bold text-brand-dark">HFOS</div>
-          <p className="text-sm text-ink-muted">Create your household</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-full.png" alt="HFOS" className="mx-auto h-auto w-56" />
+          <p className="mt-2 text-sm text-ink-muted">Create your household</p>
         </div>
         <form onSubmit={submit} className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <Field label="Your name">
