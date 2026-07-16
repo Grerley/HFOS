@@ -225,7 +225,8 @@ export default function PaymentsPage() {
           <div className="mb-3 flex flex-wrap items-center gap-2">
             {FILTERS.map((f) => (
               <button key={f} onClick={() => setFilter(f)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition ${filter === f ? "bg-brand text-white" : "border border-line text-ink-soft hover:bg-muted"}`}>
+                aria-pressed={filter === f}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${filter === f ? "bg-brand text-brand-fg" : "border border-line text-ink-soft hover:bg-muted"}`}>
                 {f}
               </button>
             ))}

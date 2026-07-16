@@ -60,6 +60,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-surface text-ink">
+      <a href="#main" className="skip-link">Skip to content</a>
       {/* Desktop sidebar */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-card md:flex">
         <div className="px-5 py-5">
@@ -68,7 +69,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <img src="/logo-full.png" alt="HFOS — Household Financial OS" className="block h-auto w-40" />
           </span>
         </div>
-        <nav className="flex-1 space-y-1 px-3">
+        <nav aria-label="Primary" className="flex-1 space-y-1 px-3">
           {NAV.map((item) => {
             const isActive = pathname?.startsWith(item.href);
             return (
@@ -94,7 +95,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <header className="hidden items-center justify-between border-b border-line bg-card px-6 py-2.5 md:flex">
           <div>
             {households.length > 1 ? (
-              <select value={activeHh ?? ""} onChange={(e) => switchHousehold(Number(e.target.value))}
+              <select value={activeHh ?? ""} onChange={(e) => switchHousehold(Number(e.target.value))} aria-label="Active household"
                 className="rounded-lg border border-line bg-card px-2 py-1 text-sm text-ink">
                 {households.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
               </select>
@@ -124,7 +125,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-24 md:px-6 md:py-8 md:pb-8">{children}</main>
+        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-24 outline-none md:px-6 md:py-8 md:pb-8">{children}</main>
       </div>
 
       {/* Floating copilot launcher (desktop) */}
@@ -134,7 +135,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </Link>
 
       {/* Mobile bottom navigation (§6.3) */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-card md:hidden">
+      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-card md:hidden">
         {NAV.filter((n) => MOBILE_NAV.includes(n.href)).map((item) => {
           const isActive = pathname?.startsWith(item.href);
           return (

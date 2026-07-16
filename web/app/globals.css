@@ -72,6 +72,33 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Visible keyboard focus everywhere (WCAG 2.2 AA — 2.4.7, 2.4.11). Pointer
+   users don't see the ring; keyboard users always do. */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Skip-to-content link: off-screen until focused (WCAG 2.4.1). */
+.skip-link {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 100;
+  transform: translateY(-150%);
+  transition: transform 0.15s ease;
+  background: var(--brand);
+  color: var(--brand-fg);
+  padding: 0.5rem 0.9rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
 /* Premium skeleton shimmer for loading states (§20.1). */
 @keyframes hfos-shimmer {
   0% { background-position: -600px 0; }
