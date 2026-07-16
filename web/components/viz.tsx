@@ -44,6 +44,59 @@ export function CategoryBars({
 
 type TrendPoint = { label: string; income_cents: number; expenses_cents: number; net_cents: number };
 
+/** Running-balance line with a zero baseline; dips below zero are flagged negative. */
+export function BalanceChart({
+  points,
+  format,
+}: {
+  points: { label: string; balance_cents: number }[];
+  format: (cents: number) => string;
+}) {
+  const [hover, setHover] = React.useState<number | null>(null);
+  if (points.length < 2) return <p className="text-sm text-ink-muted">Not enough data to plot a balance line.</p>;
+  const w = 640;
+  const h = 200;
+  const pad = 28;
+  const vals = points.map((p) => p.balance_cents);
+  const max = Math.max(...vals, 0);
+  const min = Math.min(...vals, 0);
+  const range = max - min || 1;
+  const x = (i: number) => pad + (i * (w - 2 * pad)) / (points.length - 1);
+  const y = (v: number) => h - pad - ((v - min) / range) * (h - 2 * pad);
+  const zeroY = y(0);
+  const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(p.balance_cents)}`).join(" ");
+  const dipsNegative = min < 0;
+
+  return (
+    <figure className="m-0">
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" role="img" aria-label="Projected running cash balance"
+        onMouseLeave={() => setHover(null)}>
+        {/* Zero baseline */}
+        <line x1={pad} y1={zeroY} x2={w - pad} y2={zeroY} className="text-line" stroke="currentColor" strokeWidth={1} strokeDasharray="3 3" />
+        <text x={pad} y={zeroY - 3} className="fill-current text-ink-muted text-[9px]">0</text>
+        <path d={path} fill="none" strokeWidth={2} className={dipsNegative ? "text-negative" : "text-brand"} stroke="currentColor" />
+        {points.map((p, i) => (
+          <g key={i} onMouseEnter={() => setHover(i)}>
+            {hover === i && <line x1={x(i)} y1={pad / 2} x2={x(i)} y2={h - pad} className="text-line" stroke="currentColor" strokeWidth={1} />}
+            <circle cx={x(i)} cy={y(p.balance_cents)} r={hover === i ? 3.5 : 0}
+              className={p.balance_cents < 0 ? "text-negative" : "text-brand"} fill="currentColor" />
+            <rect x={x(i) - (w - 2 * pad) / points.length / 2} y={0} width={(w - 2 * pad) / points.length} height={h} fill="transparent" />
+            <title>{`${p.label}: ${format(p.balance_cents)}`}</title>
+          </g>
+        ))}
+      </svg>
+      {hover !== null && (
+        <div className="mt-2 rounded-lg border border-line-soft bg-muted px-3 py-2 text-xs" role="status">
+          <span className="font-medium text-ink">{points[hover].label}</span>
+          <span className={`tabular ml-3 ${points[hover].balance_cents < 0 ? "text-negative" : "text-brand-dark"}`}>
+            {format(points[hover].balance_cents)}
+          </span>
+        </div>
+      )}
+    </figure>
+  );
+}
+
 export function TrendChart({
   series,
   format = (c: number) => String(c),

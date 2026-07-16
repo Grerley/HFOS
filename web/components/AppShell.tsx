@@ -10,6 +10,7 @@ import { ThemeControls } from "@/components/theme";
 const NAV = [
   { href: "/dashboard", label: "Home", icon: "◧" },
   { href: "/planner", label: "Budget", icon: "▤" },
+  { href: "/cash-flow", label: "Cash flow", icon: "≈" },
   { href: "/payments", label: "Payments", icon: "✔" },
   { href: "/wealth", label: "Wealth", icon: "◆" },
   { href: "/property", label: "Property", icon: "⌂" },

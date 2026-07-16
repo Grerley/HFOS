@@ -45,6 +45,7 @@ import {
   reversePayment,
   softDeletePayment,
 } from "./payments";
+import { cashFlowForecast } from "./cashflow";
 
 async function body<T = any>(req: Request): Promise<T> {
   try {
@@ -457,6 +458,13 @@ route("GET", "/reports/trends", async (req) => {
     series.push({ period_id: p.id, label: p.label, income_cents: s.total_income_cents, expenses_cents: s.total_expenses_cents, net_cents: s.net_position_cents, savings_cents: s.total_savings_cents, savings_rate: s.savings_rate });
   }
   return json({ series });
+});
+route("GET", "/reports/cash-flow", async (req) => {
+  const ctx = await requireAuth(req);
+  const period = await resolvePeriod(ctx, qp(req, "period_id"));
+  if (!period) return json({ has_period: false });
+  const months = Math.min(Math.max(Number(qp(req, "months")) || 12, 1), 24);
+  return json(await cashFlowForecast(ctx.db, ctx.householdId, period.id, months));
 });
 route("GET", "/insights", async (req) => {
   const ctx = await requireAuth(req);

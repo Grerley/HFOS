@@ -134,4 +134,37 @@ describe("calculation engine", () => {
     expect(d.net.delta).toBe(-150000);
     expect(d.net.delta_pct).toBe(Math.round((-150000 / 500000) * 1e6) / 1e6);
   });
+
+  it("cash timeline accumulates in date order", () => {
+    const { points, closing_cents, opening_cents } = calc.cashTimeline(100000, [
+      { date: "2026-01-20", amount_cents: -30000 },
+      { date: "2026-01-05", amount_cents: 50000 },
+      { date: "2026-01-10", amount_cents: -20000 },
+    ]);
+    expect(opening_cents).toBe(100000);
+    expect(points.map((p) => p.balance_cents)).toEqual([150000, 130000, 100000]);
+    expect(closing_cents).toBe(100000);
+  });
+
+  it("lowest balance finds the runway trough and flags negatives", () => {
+    const { points } = calc.cashTimeline(10000, [
+      { date: "2026-01-05", amount_cents: -25000 },
+      { date: "2026-01-25", amount_cents: 40000 },
+    ]);
+    const low = calc.lowestBalance(10000, points);
+    expect(low.lowest_cents).toBe(-15000);
+    expect(low.date).toBe("2026-01-05");
+    expect(low.dips_negative).toBe(true);
+  });
+
+  it("forward projection compounds a monthly net", () => {
+    const fwd = calc.forwardProjection(100000, -20000, 3);
+    expect(fwd.map((f) => f.balance_cents)).toEqual([80000, 60000, 40000]);
+  });
+
+  it("runway months: null when non-negative, floor of months otherwise", () => {
+    expect(calc.runwayMonths(100000, 5000)).toBeNull();
+    expect(calc.runwayMonths(100000, -30000)).toBe(3);
+    expect(calc.runwayMonths(0, -30000)).toBe(0);
+  });
 });

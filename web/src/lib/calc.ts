@@ -371,6 +371,66 @@ export function settlement(
   return { planned_cents: plannedCents, paid_cents: paidCents, outstanding_cents: outstanding, overpaid_cents: overpaid, status, is_overdue };
 }
 
+// ── Cash flow projection ─────────────────────────────────────────────────────
+export interface CashEvent {
+  date: string; // ISO date
+  amount_cents: number; // signed: inflow > 0, outflow < 0
+  label?: string;
+  kind?: "inflow" | "outflow";
+}
+
+export interface CashPoint extends CashEvent {
+  balance_cents: number;
+}
+
+/**
+ * Build a running-balance timeline from an opening balance and dated cash events.
+ * Events are summed in date order; each point carries the balance after that event.
+ */
+export function cashTimeline(openingCents: number, events: CashEvent[]) {
+  const sorted = [...events].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  let bal = openingCents;
+  const points: CashPoint[] = sorted.map((e) => {
+    bal += e.amount_cents;
+    return { ...e, balance_cents: bal };
+  });
+  return { opening_cents: openingCents, closing_cents: bal, points };
+}
+
+/** Lowest balance reached across a timeline (the cash-runway trough), incl. the opening. */
+export function lowestBalance(openingCents: number, points: CashPoint[]) {
+  let lowest_cents = openingCents;
+  let date: string | null = null;
+  for (const p of points) {
+    if (p.balance_cents < lowest_cents) {
+      lowest_cents = p.balance_cents;
+      date = p.date;
+    }
+  }
+  return { lowest_cents, date, dips_negative: lowest_cents < 0 };
+}
+
+/** Project a balance forward N months at a fixed monthly net run-rate. */
+export function forwardProjection(startCents: number, monthlyNetCents: number, months: number) {
+  const out: { month_index: number; balance_cents: number }[] = [];
+  let bal = startCents;
+  for (let i = 1; i <= months; i++) {
+    bal += monthlyNetCents;
+    out.push({ month_index: i, balance_cents: bal });
+  }
+  return out;
+}
+
+/**
+ * Whole months a positive balance lasts at a monthly deficit.
+ * Returns null when the run-rate is non-negative (never depletes).
+ */
+export function runwayMonths(balanceCents: number, monthlyNetCents: number): number | null {
+  if (monthlyNetCents >= 0) return null;
+  if (balanceCents <= 0) return 0;
+  return Math.floor(balanceCents / -monthlyNetCents);
+}
+
 // ── Period summary (dashboard bundle) ────────────────────────────────────────
 export function periodSummary(lines: LineCalc[]) {
   const totals = (basis: Basis) => ({
