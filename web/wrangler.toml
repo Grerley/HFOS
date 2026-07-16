@@ -1,0 +1,22 @@
+name = "hfos"
+main = ".open-next/worker.js"
+compatibility_date = "2024-12-30"
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets (Next.js output) served by the Worker.
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+# Cloudflare D1 database (created via MCP; id is live).
+[[d1_databases]]
+binding = "DB"
+database_name = "hfos-db"
+database_id = "bd46243a-954d-4465-98ac-7f91e230661b"
+migrations_dir = "migrations"
+
+# Non-secret vars. Secrets (HFOS_SECRET_KEY, HFOS_ENCRYPTION_KEY) are set with
+#   wrangler secret put HFOS_SECRET_KEY
+# or in the dashboard → Worker → Settings → Variables (encrypted).
+[vars]
+HFOS_COPILOT_PROVIDER = "rules"

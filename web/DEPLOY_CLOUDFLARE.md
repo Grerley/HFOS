@@ -51,11 +51,15 @@ wrangler d1 migrations apply hfos-db --remote     # production D1
 ```
 
 ### 4. Connect the repo for auto-deploy (Workers Builds)
-Cloudflare dashboard → **Workers & Pages → Create → Connect to Git** → pick `Grerley/HFOS`:
+Cloudflare dashboard → **Workers & Pages → Create → Workers → Connect to Git** → pick
+`Grerley/HFOS`, branch `path-b-cloudflare` (or `main` after we merge):
 - **Root directory:** `web`
-- **Build command:** `npm run deploy:build`  (defined in `web/package.json`)
-- **Branch:** `main` (production). Every push builds + deploys automatically.
-- The build step runs `wrangler d1 migrations apply --remote` so schema stays in sync.
+- **Build command:** `npx opennextjs-cloudflare build`
+- **Deploy command:** `npx wrangler d1 migrations apply hfos-db --remote && npx wrangler deploy`
+- Every push then builds + migrates + deploys automatically.
+
+> The D1 database and its schema are **already provisioned** (done via MCP), so the very
+> first deploy works even before any migration step runs.
 
 ### 5. (Optional) custom domain
 Add `app.yourdomain.com` to the Worker in the dashboard; Cloudflare manages TLS.
