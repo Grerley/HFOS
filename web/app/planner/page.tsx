@@ -1,7 +1,7 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
-import { Button, Card, Field, Input, Select, Badge, EmptyState, Spinner } from "@/components/ui";
+import { Button, Card, Input, Select, Badge, EmptyState, Spinner } from "@/components/ui";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent, fromCents, toCents } from "@/lib/format";
 import type { Category, Line, Member, Period, PeriodSummary } from "@/lib/types";
@@ -21,9 +21,25 @@ export default function PlannerPage() {
   const [summary, setSummary] = useState<PeriodSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [activeSection, setActiveSection] = useState<number | null>(null);
   const period = periods.find((p) => p.id === periodId) || null;
   const currency = "ZAR";
   const locked = period?.status === "closed" || period?.status === "archived";
+
+  // ── Section helpers ─────────────────────────────────────────────────────
+  const catMap = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+  const sections = useMemo(
+    () => categories.filter((c) => c.is_section).sort((a, b) => a.sort_order - b.sort_order),
+    [categories],
+  );
+  const sectionIdOf = useCallback(
+    (categoryId: number): number | null => {
+      const c = catMap.get(categoryId);
+      if (!c) return null;
+      return c.is_section ? c.id : c.parent_id ?? null;
+    },
+    [catMap],
+  );
 
   const loadPeriod = useCallback(async (pid: number) => {
     const [lines, sum] = await Promise.all([
@@ -53,6 +69,11 @@ export default function PlannerPage() {
     })();
   }, [loadPeriod]);
 
+  // Default to the first section tab once categories are known.
+  useEffect(() => {
+    if (activeSection === null && sections.length) setActiveSection(sections[0].id);
+  }, [sections, activeSection]);
+
   async function selectPeriod(id: number) {
     setPeriodId(id);
     setLoading(true);
@@ -60,26 +81,28 @@ export default function PlannerPage() {
     setLoading(false);
   }
 
-  function editRow(idx: number, patch: Partial<EditRow>) {
-    setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, ...patch, _dirty: true } : r)));
+  function editRow(id: number, patch: Partial<EditRow>) {
+    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch, _dirty: true } : r)));
   }
 
   function addRow() {
-    const firstCat = categories.find((c) => !c.is_section) || categories[0];
+    const child =
+      categories.find((c) => !c.is_section && c.parent_id === activeSection) ||
+      categories.find((c) => !c.is_section);
     setRows((rs) => [
       ...rs,
       {
-        id: -Date.now(), period_id: periodId!, category_id: firstCat?.id ?? 0, item_name: "",
-        planned_amount_cents: 0, actual_amount_cents: 0, recurrence: "monthly",
+        id: -Date.now(), period_id: periodId!, category_id: child?.id ?? activeSection ?? 0,
+        item_name: "", planned_amount_cents: 0, actual_amount_cents: 0, recurrence: "monthly",
         payment_status: "planned", is_recurring: true, priority: 3, needs_review: false, _new: true,
       } as EditRow,
     ]);
   }
 
-  function removeRow(idx: number) {
-    const row = rows[idx];
-    if (!row._new) setDeletes((d) => [...d, row.id]);
-    setRows((rs) => rs.filter((_, i) => i !== idx));
+  function removeRow(id: number) {
+    const row = rows.find((r) => r.id === id);
+    if (row && !row._new) setDeletes((d) => [...d, row.id]);
+    setRows((rs) => rs.filter((r) => r.id !== id));
   }
 
   async function save() {
@@ -148,8 +171,20 @@ export default function PlannerPage() {
 
   if (loading && !periods.length) return <AppShell><Spinner /></AppShell>;
 
-  const catName = (id: number) => categories.find((c) => c.id === id)?.name || "—";
+  const catName = (id: number) => catMap.get(id)?.name || "—";
   const dirty = rows.some((r) => r._dirty || r._new) || deletes.length > 0;
+
+  // Tabs: every section plus an "Other" bucket if any line can't be mapped.
+  const hasUnmapped = rows.some((r) => sectionIdOf(r.category_id) === null);
+  const tabs = [
+    ...sections.map((s) => ({ id: s.id as number | null, name: s.name, type: s.type })),
+    ...(hasUnmapped ? [{ id: null as number | null, name: "Other", type: "expense" }] : []),
+  ];
+  const countFor = (sid: number | null) => rows.filter((r) => sectionIdOf(r.category_id) === sid).length;
+  const plannedFor = (sid: number | null) =>
+    rows.filter((r) => sectionIdOf(r.category_id) === sid).reduce((s, r) => s + r.planned_amount_cents, 0);
+  const visibleRows = rows.filter((r) => sectionIdOf(r.category_id) === activeSection);
+  const activeName = tabs.find((t) => t.id === activeSection)?.name ?? "Section";
 
   return (
     <AppShell>
@@ -199,7 +234,11 @@ export default function PlannerPage() {
 
           <Card
             title="Budget lines"
-            subtitle={locked ? "Period is locked — unlock via status to edit" : "Edit inline, then Save changes"}
+            subtitle={
+              locked
+                ? "Period is locked — unlock via status to edit"
+                : `${activeName}: ${formatMoney(plannedFor(activeSection), currency)} planned across ${visibleRows.length} line${visibleRows.length === 1 ? "" : "s"}`
+            }
             actions={
               <div className="flex gap-2">
                 {!locked && <Button variant="ghost" onClick={addRow}>Add line</Button>}
@@ -207,6 +246,30 @@ export default function PlannerPage() {
               </div>
             }
           >
+            {/* Section tabs */}
+            <div className="mb-4 flex flex-wrap gap-1 border-b border-slate-200">
+              {tabs.map((t) => {
+                const active = t.id === activeSection;
+                return (
+                  <button
+                    key={String(t.id)}
+                    onClick={() => setActiveSection(t.id)}
+                    className={`-mb-px flex items-center gap-2 rounded-t-lg border-b-2 px-3 py-2 text-sm font-medium transition ${
+                      active
+                        ? "border-brand text-brand-dark"
+                        : "border-transparent text-ink-muted hover:text-ink"
+                    }`}
+                  >
+                    {t.type === "income" && <span className="text-positive">▲</span>}
+                    {t.name}
+                    <span className={`rounded-full px-1.5 text-xs ${active ? "bg-brand-light text-brand-dark" : "bg-slate-100 text-ink-muted"}`}>
+                      {countFor(t.id)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -221,26 +284,30 @@ export default function PlannerPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r, idx) => (
+                  {visibleRows.map((r) => (
                     <tr key={r.id} className="border-b border-slate-50">
                       <td className="py-1.5 pr-3">
                         {locked ? r.item_name : (
-                          <Input value={r.item_name} onChange={(e) => editRow(idx, { item_name: e.target.value })} className="min-w-[10rem]" />
+                          <Input value={r.item_name} onChange={(e) => editRow(r.id, { item_name: e.target.value })} className="min-w-[10rem]" />
                         )}
                         {r.needs_review && <Badge tone="warning">review</Badge>}
                       </td>
                       <td className="py-1.5 pr-3">
                         {locked ? catName(r.category_id) : (
-                          <Select value={r.category_id} onChange={(e) => editRow(idx, { category_id: Number(e.target.value) })}>
-                            {categories.filter((c) => !c.is_section).map((c) => (
-                              <option key={c.id} value={c.id}>{c.name}</option>
+                          <Select value={r.category_id} onChange={(e) => editRow(r.id, { category_id: Number(e.target.value) })}>
+                            {sections.map((sec) => (
+                              <optgroup key={sec.id} label={sec.name}>
+                                {categories.filter((c) => !c.is_section && c.parent_id === sec.id).map((c) => (
+                                  <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                              </optgroup>
                             ))}
                           </Select>
                         )}
                       </td>
                       <td className="py-1.5 pr-3">
                         {locked ? (members.find((m) => m.id === r.owner_member_id)?.name || "—") : (
-                          <Select value={r.owner_member_id ?? ""} onChange={(e) => editRow(idx, { owner_member_id: e.target.value ? Number(e.target.value) : null })}>
+                          <Select value={r.owner_member_id ?? ""} onChange={(e) => editRow(r.id, { owner_member_id: e.target.value ? Number(e.target.value) : null })}>
                             <option value="">—</option>
                             {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                           </Select>
@@ -249,31 +316,40 @@ export default function PlannerPage() {
                       <td className="py-1.5 pr-3 text-right">
                         {locked ? formatMoney(r.planned_amount_cents, currency) : (
                           <Input type="number" step="0.01" defaultValue={fromCents(r.planned_amount_cents)}
-                            onChange={(e) => editRow(idx, { planned_amount_cents: toCents(e.target.value) })}
+                            onChange={(e) => editRow(r.id, { planned_amount_cents: toCents(e.target.value) })}
                             className="w-28 text-right tabular" />
                         )}
                       </td>
                       <td className="py-1.5 pr-3 text-right">
                         {locked ? formatMoney(r.actual_amount_cents, currency) : (
                           <Input type="number" step="0.01" defaultValue={fromCents(r.actual_amount_cents)}
-                            onChange={(e) => editRow(idx, { actual_amount_cents: toCents(e.target.value) })}
+                            onChange={(e) => editRow(r.id, { actual_amount_cents: toCents(e.target.value) })}
                             className="w-28 text-right tabular" />
                         )}
                       </td>
                       <td className="py-1.5 pr-3">
                         {locked ? r.payment_status : (
-                          <Select value={r.payment_status} onChange={(e) => editRow(idx, { payment_status: e.target.value })}>
+                          <Select value={r.payment_status} onChange={(e) => editRow(r.id, { payment_status: e.target.value })}>
                             {["planned", "unpaid", "paid"].map((s) => <option key={s} value={s}>{s}</option>)}
                           </Select>
                         )}
                       </td>
                       <td className="py-1.5 text-right">
-                        {!locked && <button onClick={() => removeRow(idx)} className="text-xs text-ink-muted hover:text-negative">✕</button>}
+                        {!locked && <button onClick={() => removeRow(r.id)} className="text-xs text-ink-muted hover:text-negative">✕</button>}
                       </td>
                     </tr>
                   ))}
-                  {!rows.length && (
-                    <tr><td colSpan={7} className="py-6 text-center text-ink-muted">No lines. Add one to begin.</td></tr>
+                  {visibleRows.length > 0 && (
+                    <tr className="border-t-2 border-slate-200 font-medium">
+                      <td className="py-2 pr-3 text-ink-muted" colSpan={3}>{activeName} subtotal (planned)</td>
+                      <td className="tabular py-2 pr-3 text-right">{formatMoney(plannedFor(activeSection), currency)}</td>
+                      <td colSpan={3}></td>
+                    </tr>
+                  )}
+                  {!visibleRows.length && (
+                    <tr><td colSpan={7} className="py-6 text-center text-ink-muted">
+                      No lines in {activeName}. {!locked && "Use “Add line” to create one here."}
+                    </td></tr>
                   )}
                 </tbody>
               </table>
