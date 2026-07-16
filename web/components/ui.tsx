@@ -150,6 +150,24 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
   );
 }
 
+export function ErrorState({ title = "Something went wrong", hint, onRetry, retrying }: {
+  title?: string; hint?: string; onRetry?: () => void; retrying?: boolean;
+}) {
+  return (
+    <div className="rounded-xl border border-negative/30 bg-negative/5 p-8 text-center" role="alert">
+      <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-negative/10 text-negative" aria-hidden>!</div>
+      <p className="text-sm font-semibold text-ink">{title}</p>
+      {hint && <p className="mx-auto mt-1 max-w-md text-xs text-ink-muted">{hint}</p>}
+      {onRetry && (
+        <button onClick={onRetry} disabled={retrying}
+          className="mt-4 inline-flex items-center rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-fg transition hover:opacity-90 disabled:opacity-50">
+          {retrying ? "Retrying…" : "Try again"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function Spinner() {
   return (
     <div className="flex items-center justify-center p-10 text-sm text-ink-muted">Loading…</div>

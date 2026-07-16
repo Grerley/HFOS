@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
 import Link from "next/link";
-import { Card, StatCard, Badge, EmptyState, PageSkeleton } from "@/components/ui";
+import { Card, StatCard, Badge, EmptyState, PageSkeleton, ErrorState } from "@/components/ui";
 import { BalanceChart } from "@/components/viz";
 import { api } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
@@ -30,25 +30,36 @@ export default function CashFlowPage() {
   const [data, setData] = useState<CashFlow | null>(null);
   const [currency, setCurrency] = useState("ZAR");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [cf, dash] = await Promise.all([
-          api.get<CashFlow>("/reports/cash-flow"),
-          api.get<any>("/dashboard").catch(() => null),
-        ]);
-        setData(cf);
-        if (dash?.currency) setCurrency(dash.currency);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  async function load() {
+    setLoading(true);
+    setError(false);
+    try {
+      const [cf, dash] = await Promise.all([
+        api.get<CashFlow>("/reports/cash-flow"),
+        api.get<any>("/dashboard").catch(() => null),
+      ]);
+      setData(cf);
+      if (dash?.currency) setCurrency(dash.currency);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
 
   const money = (c: number) => formatMoney(c, currency);
 
   if (loading) return <AppShell><PageSkeleton /></AppShell>;
+  if (error) return (
+    <AppShell>
+      <PageHeader title="Cash flow" description="Timeline, runway and forward projection." />
+      <ErrorState hint="We couldn't load your cash-flow projection. Check your connection and try again." onRetry={load} />
+    </AppShell>
+  );
 
   if (!data?.has_period) {
     return (

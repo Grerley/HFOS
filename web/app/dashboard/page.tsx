@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
 import Link from "next/link";
-import { Card, StatCard, Badge, EmptyState, PageSkeleton, Drawer, DrillRow, Skeleton } from "@/components/ui";
+import { Card, StatCard, Badge, EmptyState, PageSkeleton, Drawer, DrillRow, Skeleton, ErrorState } from "@/components/ui";
 import { CategoryBars, TrendChart } from "@/components/viz";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent } from "@/lib/format";
@@ -14,6 +14,7 @@ export default function DashboardPage() {
   const [trend, setTrend] = useState<any[]>([]);
   const [settle, setSettle] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [drill, setDrill] = useState<string | null>(null);
   const [detail, setDetail] = useState<{ lines: any[]; cats: any[]; accounts: any[] } | null>(null);
 
@@ -29,26 +30,36 @@ export default function DashboardPage() {
     }
   }
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [d, ins, tr, st] = await Promise.all([
-          api.get<DashboardResponse>("/dashboard"),
-          api.get<Insight[]>("/insights").catch(() => []),
-          api.get<{ series: any[] }>("/reports/trends").catch(() => ({ series: [] })),
-          api.get<any>("/reports/outstanding").catch(() => null),
-        ]);
-        setData(d);
-        setInsights(ins);
-        setTrend(tr.series);
-        setSettle(st?.has_period ? st : null);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  async function load() {
+    setLoading(true);
+    setError(false);
+    try {
+      const [d, ins, tr, st] = await Promise.all([
+        api.get<DashboardResponse>("/dashboard"),
+        api.get<Insight[]>("/insights").catch(() => []),
+        api.get<{ series: any[] }>("/reports/trends").catch(() => ({ series: [] })),
+        api.get<any>("/reports/outstanding").catch(() => null),
+      ]);
+      setData(d);
+      setInsights(ins);
+      setTrend(tr.series);
+      setSettle(st?.has_period ? st : null);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
 
   if (loading) return <AppShell><PageSkeleton /></AppShell>;
+  if (error) return (
+    <AppShell>
+      <PageHeader title="Dashboard" description="Your household's financial position at a glance." />
+      <ErrorState hint="We couldn't load your dashboard. Check your connection and try again." onRetry={load} />
+    </AppShell>
+  );
 
   if (!data?.has_period) {
     return (
