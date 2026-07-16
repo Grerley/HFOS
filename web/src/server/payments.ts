@@ -241,6 +241,39 @@ export async function markPaidInFull(db: DB, householdId: number, actorUserId: n
   return addPayment(db, householdId, actorUserId, lineId, { ...p, amount_cents: outstanding });
 }
 
+/** Settle several lines' outstanding balances in one action (FR-020, bulk update). */
+export async function bulkMarkPaid(
+  db: DB,
+  householdId: number,
+  actorUserId: number,
+  lineIds: number[],
+  p: Omit<PaymentInput, "amount_cents"> = {},
+) {
+  const results: { line_id: number; ok: boolean; paid_cents?: number; reason?: string }[] = [];
+  for (const id of lineIds) {
+    try {
+      const line = await getLineScoped(db, householdId, id);
+      const paidNow = await recomputeLine(db, householdId, line.id);
+      const outstanding = Math.max(line.planned_amount_cents - paidNow, 0);
+      if (outstanding <= 0) {
+        results.push({ line_id: id, ok: false, reason: "nothing outstanding" });
+        continue;
+      }
+      const r = await addPayment(db, householdId, actorUserId, id, { ...p, amount_cents: outstanding });
+      results.push({ line_id: id, ok: true, paid_cents: r.paid_cents });
+    } catch (e: any) {
+      results.push({ line_id: id, ok: false, reason: e?.message ?? "failed" });
+    }
+  }
+  const settled = results.filter((r) => r.ok).length;
+  await recordAudit(db, {
+    action: "payment.bulk_marked_paid", entity_type: "budget_line", entity_id: householdId,
+    household_id: householdId, actor_user_id: actorUserId,
+    detail: { requested: lineIds.length, settled },
+  });
+  return { requested: lineIds.length, settled, results };
+}
+
 export async function paymentHistory(db: DB, householdId: number, lineId: number) {
   await getLineScoped(db, householdId, lineId);
   const recs = await db

@@ -38,6 +38,7 @@ import { answerQuestion, generatePeriodInsights, runScenario } from "./insights"
 import { analyzeWorkbook, importWorkbook } from "./import";
 import {
   addPayment,
+  bulkMarkPaid,
   editPayment,
   markPaidInFull,
   paymentHistory,
@@ -536,6 +537,15 @@ route("GET", "/budget-lines/:id/payments", async (req, params) => {
 route("POST", "/budget-lines/:id/mark-paid", async (req, params) => {
   const ctx = await requireAuth(req); requireWrite(ctx);
   return json(await markPaidInFull(ctx.db, ctx.householdId, ctx.userId, Number(params.id), await body(req)), 201);
+});
+route("POST", "/budget-periods/:id/bulk-mark-paid", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  await getScoped(ctx.db.select().from(budgetPeriods).where(eq(budgetPeriods.id, Number(params.id))), ctx.householdId, "Budget period");
+  const p = await body(req);
+  const ids: number[] = Array.isArray(p.line_ids) ? p.line_ids.map(Number) : [];
+  if (!ids.length) throw new HttpError(422, "No lines selected");
+  const { line_ids, ...rest } = p;
+  return json(await bulkMarkPaid(ctx.db, ctx.householdId, ctx.userId, ids, rest), 201);
 });
 route("PATCH", "/payments/:id", async (req, params) => {
   const ctx = await requireAuth(req); requireWrite(ctx);

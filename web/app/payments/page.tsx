@@ -2,6 +2,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
 import { Button, Card, Field, Input, Select, EmptyState, PageSkeleton } from "@/components/ui";
+import PaymentCalendar from "@/components/PaymentCalendar";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent, toCents } from "@/lib/format";
 import type { Member, Period } from "@/lib/types";
@@ -79,6 +80,9 @@ export default function PaymentsPage() {
   const [history, setHistory] = useState<PaymentRec[]>([]);
   const [modal, setModal] = useState<{ line: SettleLine; prefill: number } | null>(null);
   const [confirmLine, setConfirmLine] = useState<SettleLine | null>(null);
+  const [view, setView] = useState<"list" | "calendar">("list");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const loadSettlement = useCallback(async (pid: number) => {
     setData(await api.get<Settlement>(`/budget-periods/${pid}/settlement`));
@@ -98,10 +102,28 @@ export default function PaymentsPage() {
   }, [loadSettlement]);
 
   async function selectPeriod(id: number) {
-    setPeriodId(id); setExpanded(null);
+    setPeriodId(id); setExpanded(null); setSelected(new Set());
     await loadSettlement(id);
   }
   async function refresh() { if (periodId) await loadSettlement(periodId); if (expanded) setHistory(await api.get(`/budget-lines/${expanded}/payments`)); }
+
+  function toggleSelect(id: number) {
+    setSelected((cur) => { const n = new Set(cur); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+
+  async function bulkMarkPaid() {
+    if (!periodId || !selected.size) return;
+    const ids = [...selected];
+    if (!confirm(`Mark ${ids.length} obligation${ids.length === 1 ? "" : "s"} paid in full? This records a payment settling each one's outstanding balance.`)) return;
+    setBulkBusy(true);
+    try {
+      const r = await api.post<{ settled: number; requested: number }>(`/budget-periods/${periodId}/bulk-mark-paid`, { line_ids: ids });
+      setSelected(new Set());
+      await refresh();
+      if (r.settled < r.requested) alert(`Settled ${r.settled} of ${r.requested}. Some had nothing outstanding.`);
+    } catch (e: any) { alert(e.message); }
+    finally { setBulkBusy(false); }
+  }
 
   async function markPaidFull(lineId: number) {
     try { await api.post(`/budget-lines/${lineId}/mark-paid`, {}); await refresh(); }
@@ -140,7 +162,18 @@ export default function PaymentsPage() {
 
   return (
     <AppShell>
-      <PageHeader title="Payments & settlement" description="Track what's paid, outstanding, partial and overdue this month." />
+      <PageHeader
+        title="Payments & settlement"
+        description="Track what's paid, outstanding, partial and overdue this month."
+        actions={
+          <div className="inline-flex rounded-lg border border-line p-0.5 text-xs">
+            <button onClick={() => setView("list")}
+              className={`rounded-md px-3 py-1 font-medium transition ${view === "list" ? "bg-brand text-brand-fg" : "text-ink-soft hover:bg-muted"}`}>List</button>
+            <button onClick={() => setView("calendar")}
+              className={`rounded-md px-3 py-1 font-medium transition ${view === "calendar" ? "bg-brand text-brand-fg" : "text-ink-soft hover:bg-muted"}`}>Calendar</button>
+          </div>
+        }
+      />
 
       {!periods.length ? (
         <EmptyState title="No budget periods yet" hint="Create a monthly budget in the planner first." />
@@ -164,6 +197,30 @@ export default function PaymentsPage() {
             </div>
           )}
 
+          {/* Bulk action bar (FR-020) */}
+          {selected.size > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-brand bg-brand-light px-4 py-2.5">
+              <span className="text-sm font-medium text-brand-dark">{selected.size} selected</span>
+              <Button onClick={bulkMarkPaid} disabled={bulkBusy}>{bulkBusy ? "Settling…" : "Mark paid in full"}</Button>
+              <button onClick={() => setSelected(new Set())} className="text-xs font-medium text-ink-soft underline hover:text-ink">Clear</button>
+            </div>
+          )}
+
+          {view === "calendar" && data && (
+            <Card title="Payment calendar" subtitle="Obligations by due date — click an item to record a payment">
+              <PaymentCalendar
+                lines={data.lines}
+                today={data.today}
+                currency={CUR}
+                selected={selected}
+                onToggleSelect={toggleSelect}
+                onPay={(id) => { const l = data.lines.find((x) => x.line_id === id); if (l) setModal({ line: l, prefill: l.outstanding_cents }); }}
+              />
+            </Card>
+          )}
+
+          {view === "list" && (
+          <>
           {/* Filters + search */}
           <div className="mb-3 flex flex-wrap items-center gap-2">
             {FILTERS.map((f) => (
@@ -172,6 +229,18 @@ export default function PaymentsPage() {
                 {f}
               </button>
             ))}
+            {visible.some((l) => l.outstanding_cents > 0) && (
+              <button
+                onClick={() => {
+                  const payable = visible.filter((l) => l.outstanding_cents > 0).map((l) => l.line_id);
+                  const allSel = payable.every((id) => selected.has(id));
+                  setSelected(allSel ? new Set() : new Set(payable));
+                }}
+                className="rounded-full border border-line px-3 py-1 text-xs font-medium text-ink-soft hover:bg-muted"
+              >
+                {visible.filter((l) => l.outstanding_cents > 0).every((l) => selected.has(l.line_id)) ? "Deselect all" : "Select all outstanding"}
+              </button>
+            )}
             <Input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} className="ml-auto max-w-[12rem]" />
           </div>
 
@@ -181,6 +250,7 @@ export default function PaymentsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-xs uppercase text-ink-muted">
+                    <th className="py-2 pr-2 w-8"></th>
                     <th className="py-2 pr-3">Expense</th>
                     <th className="py-2 pr-3">Category</th>
                     <th className="py-2 pr-3 text-right">Planned</th>
@@ -197,6 +267,11 @@ export default function PaymentsPage() {
                   {visible.map((l) => (
                     <Fragment key={l.line_id}>
                       <tr className="border-b border-line-soft align-middle">
+                        <td className="py-2 pr-2">
+                          {l.outstanding_cents > 0 && (
+                            <input type="checkbox" aria-label={`Select ${l.item_name}`} checked={selected.has(l.line_id)} onChange={() => toggleSelect(l.line_id)} />
+                          )}
+                        </td>
                         <td className="py-2 pr-3 font-medium text-ink">
                           <button onClick={() => toggleExpand(l.line_id)} className="mr-1 text-ink-muted">{expanded === l.line_id ? "▾" : "▸"}</button>
                           {l.item_name}
@@ -226,7 +301,7 @@ export default function PaymentsPage() {
                       </tr>
                       {expanded === l.line_id && (
                         <tr className="bg-muted">
-                          <td colSpan={10} className="px-6 py-4">
+                          <td colSpan={11} className="px-6 py-4">
                             <ExpandedRow line={l} history={history} members={members} accounts={accounts}
                               onChanged={refresh} onAddPayment={() => setModal({ line: l, prefill: l.outstanding_cents })}
                               onMarkFull={() => markPaidFull(l.line_id)} onConfirm={() => setConfirmLine(l)} />
@@ -236,7 +311,7 @@ export default function PaymentsPage() {
                     </Fragment>
                   ))}
                   {!visible.length && (
-                    <tr><td colSpan={10} className="py-8 text-center text-ink-muted">No expenses match “{filter}”.</td></tr>
+                    <tr><td colSpan={11} className="py-8 text-center text-ink-muted">No expenses match “{filter}”.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -255,6 +330,8 @@ export default function PaymentsPage() {
             ))}
             {!visible.length && <EmptyState title="Nothing here" hint={`No expenses match “${filter}”.`} />}
           </div>
+          </>
+          )}
         </>
       )}
 
