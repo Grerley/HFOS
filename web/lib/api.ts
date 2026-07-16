@@ -33,6 +33,8 @@ export function setHouseholdId(id: number | string | null) {
 export function logout() {
   setToken(null);
   setHouseholdId(null);
+  // Drop cached API responses so a different user can't see them (best-effort).
+  import("./offline").then((m) => m.clearApiCache()).catch(() => undefined);
 }
 
 export class ApiError extends Error {
@@ -41,6 +43,27 @@ export class ApiError extends Error {
     super(message);
     this.status = status;
   }
+}
+
+// Thrown when a write is queued because the device is offline. Pages can treat
+// this as a soft success ("saved offline") rather than a hard failure.
+export class OfflineError extends Error {
+  queued = true;
+  constructor(message = "Saved offline — this change will sync when you reconnect.") {
+    super(message);
+  }
+}
+
+function isNetworkError(err: unknown): boolean {
+  // fetch() rejects with a TypeError on network failure (offline, DNS, etc.).
+  return err instanceof TypeError || (typeof navigator !== "undefined" && !navigator.onLine);
+}
+
+// Queue a mutating request for later replay; used when the network is down.
+async function queueOrThrow<T>(method: string, path: string, body: unknown): Promise<T> {
+  const { enqueueWrite } = await import("./offline");
+  await enqueueWrite({ method, path, body, token: getToken(), household: getHouseholdId() });
+  throw new OfflineError();
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -68,13 +91,22 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
+async function mutate<T>(method: string, path: string, body?: unknown): Promise<T> {
+  try {
+    return await request<T>(path, { method, body: body != null ? JSON.stringify(body) : undefined });
+  } catch (err) {
+    // Only queue genuine offline/network failures — real server errors propagate.
+    if (err instanceof ApiError) throw err;
+    if (isNetworkError(err)) return queueOrThrow<T>(method, path, body ?? null);
+    throw err;
+  }
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
-  patch: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
-  del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  post: <T>(path: string, body?: unknown) => mutate<T>("POST", path, body),
+  patch: <T>(path: string, body?: unknown) => mutate<T>("PATCH", path, body),
+  del: <T>(path: string) => mutate<T>("DELETE", path),
 
   // Multipart upload (workbook import) — no JSON content-type.
   async upload<T>(path: string, form: FormData): Promise<T> {

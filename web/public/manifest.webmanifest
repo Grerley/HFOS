@@ -1,0 +1,14 @@
+{
+  "name": "HFOS — Household Financial Operating System",
+  "short_name": "HFOS",
+  "description": "A secure, explainable personal-CFO platform for serious households.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0a1120",
+  "theme_color": "#16324f",
+  "icons": [
+    { "src": "/logo-mark.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/logo-mark.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

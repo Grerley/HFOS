@@ -5,6 +5,7 @@ import React, { useEffect, useState } from "react";
 import { AUTH, getHouseholdId, getToken, logout, setHouseholdId } from "@/lib/api";
 import type { Household } from "@/lib/types";
 import { ThemeControls } from "@/components/theme";
+import OfflineBanner from "@/components/OfflineBanner";
 
 // Primary navigation (information architecture §5.1).
 const NAV = [
@@ -91,6 +92,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
+        <OfflineBanner />
         {/* Desktop command bar (§6.1) */}
         <header className="hidden items-center justify-between border-b border-line bg-card px-6 py-2.5 md:flex">
           <div>
