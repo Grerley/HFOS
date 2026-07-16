@@ -1,4 +1,4 @@
-CREATE TABLE `account_balances` (
+CREATE TABLE IF NOT EXISTS `account_balances` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`account_id` integer NOT NULL,
 	`as_of` text NOT NULL,
@@ -7,7 +7,7 @@ CREATE TABLE `account_balances` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `accounts` (
+CREATE TABLE IF NOT EXISTS `accounts` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`household_id` integer NOT NULL,
 	`name` text NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE `accounts` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `audit_events` (
+CREATE TABLE IF NOT EXISTS `audit_events` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`household_id` integer,
 	`actor_user_id` integer,
@@ -38,7 +38,7 @@ CREATE TABLE `audit_events` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `budget_line_allocations` (
+CREATE TABLE IF NOT EXISTS `budget_line_allocations` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`line_id` integer NOT NULL,
 	`member_id` integer NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE `budget_line_allocations` (
 	`percent_bp` integer DEFAULT 0 NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `budget_lines` (
+CREATE TABLE IF NOT EXISTS `budget_lines` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`period_id` integer NOT NULL,
 	`household_id` integer NOT NULL,
@@ -72,7 +72,7 @@ CREATE TABLE `budget_lines` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `budget_periods` (
+CREATE TABLE IF NOT EXISTS `budget_periods` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`household_id` integer NOT NULL,
 	`label` text NOT NULL,
@@ -87,7 +87,7 @@ CREATE TABLE `budget_periods` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `categories` (
+CREATE TABLE IF NOT EXISTS `categories` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`household_id` integer NOT NULL,
 	`parent_id` integer,
@@ -101,7 +101,7 @@ CREATE TABLE `categories` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `goal_fundings` (
+CREATE TABLE IF NOT EXISTS `goal_fundings` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`goal_id` integer NOT NULL,
 	`source` text NOT NULL,
@@ -112,7 +112,7 @@ CREATE TABLE `goal_fundings` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `goals` (
+CREATE TABLE IF NOT EXISTS `goals` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`household_id` integer NOT NULL,
 	`name` text NOT NULL,
@@ -130,7 +130,7 @@ CREATE TABLE `goals` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `household_members` (
+CREATE TABLE IF NOT EXISTS `household_members` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`household_id` integer NOT NULL,
 	`user_id` integer,
@@ -142,7 +142,7 @@ CREATE TABLE `household_members` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `households` (
+CREATE TABLE IF NOT EXISTS `households` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`name` text NOT NULL,
 	`base_currency` text DEFAULT 'ZAR' NOT NULL,
@@ -153,7 +153,7 @@ CREATE TABLE `households` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `insights` (
+CREATE TABLE IF NOT EXISTS `insights` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`household_id` integer NOT NULL,
 	`period_id` integer,
@@ -168,7 +168,7 @@ CREATE TABLE `insights` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `memberships` (
+CREATE TABLE IF NOT EXISTS `memberships` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
 	`household_id` integer NOT NULL,
@@ -177,7 +177,7 @@ CREATE TABLE `memberships` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `properties` (
+CREATE TABLE IF NOT EXISTS `properties` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`household_id` integer NOT NULL,
 	`name` text NOT NULL,
@@ -193,7 +193,7 @@ CREATE TABLE `properties` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `property_cash_flows` (
+CREATE TABLE IF NOT EXISTS `property_cash_flows` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`property_id` integer NOT NULL,
 	`period_id` integer,
@@ -212,7 +212,7 @@ CREATE TABLE `property_cash_flows` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `scenarios` (
+CREATE TABLE IF NOT EXISTS `scenarios` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`household_id` integer NOT NULL,
 	`base_period_id` integer,
@@ -226,7 +226,7 @@ CREATE TABLE `scenarios` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `transactions` (
+CREATE TABLE IF NOT EXISTS `transactions` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`household_id` integer NOT NULL,
 	`account_id` integer,
@@ -245,7 +245,7 @@ CREATE TABLE `transactions` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `users` (
+CREATE TABLE IF NOT EXISTS `users` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`name` text NOT NULL,
 	`email` text NOT NULL,
@@ -256,4 +256,4 @@ CREATE TABLE `users` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `users_email_unique` ON `users` (`email`);
+CREATE UNIQUE INDEX IF NOT EXISTS `users_email_unique` ON `users` (`email`);
