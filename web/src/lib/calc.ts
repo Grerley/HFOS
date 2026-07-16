@@ -311,6 +311,66 @@ export function scenarioDelta(
   return out;
 }
 
+// ── Payment settlement engine ────────────────────────────────────────────────
+export interface PaymentRec {
+  amount_cents: number;
+  is_reversal?: boolean;
+  deleted?: boolean;
+}
+
+export type PaymentStatus =
+  | "not_paid"
+  | "partially_paid"
+  | "fully_paid"
+  | "overpaid"
+  | "overdue"
+  | "scheduled"
+  | "cancelled"
+  | "not_applicable";
+
+/** Total paid = sum of active records, with reversals subtracting (BR-003). */
+export function paidAmount(records: PaymentRec[]): number {
+  return records
+    .filter((r) => !r.deleted)
+    .reduce((s, r) => s + (r.is_reversal ? -r.amount_cents : r.amount_cents), 0);
+}
+
+export interface Settlement {
+  planned_cents: number;
+  paid_cents: number;
+  outstanding_cents: number;
+  overpaid_cents: number;
+  status: PaymentStatus;
+  is_overdue: boolean;
+}
+
+/**
+ * Derive the settlement position for one expense line (BR-001, BR-002, BR-010).
+ * `today` and `dueDate` are ISO dates (YYYY-MM-DD); string comparison is date-correct.
+ * `manualStatus` overrides derivation for cancelled | not_applicable | scheduled.
+ */
+export function settlement(
+  plannedCents: number,
+  paidCents: number,
+  opts: { dueDate?: string | null; today?: string | null; manualStatus?: string | null } = {},
+): Settlement {
+  const outstanding = Math.max(plannedCents - paidCents, 0); // BR-002: never negative
+  const overpaid = Math.max(paidCents - plannedCents, 0);
+  const ms = opts.manualStatus;
+  const overridden = ms === "cancelled" || ms === "not_applicable" || ms === "scheduled";
+  const duePassed = !!(opts.dueDate && opts.today && opts.dueDate < opts.today);
+
+  let status: PaymentStatus;
+  if (overridden) status = ms as PaymentStatus;
+  else if (paidCents <= 0) status = duePassed ? "overdue" : "not_paid";
+  else if (paidCents < plannedCents) status = "partially_paid";
+  else if (paidCents === plannedCents) status = "fully_paid";
+  else status = "overpaid";
+
+  const is_overdue = !overridden && outstanding > 0 && duePassed;
+  return { planned_cents: plannedCents, paid_cents: paidCents, outstanding_cents: outstanding, overpaid_cents: overpaid, status, is_overdue };
+}
+
 // ── Period summary (dashboard bundle) ────────────────────────────────────────
 export function periodSummary(lines: LineCalc[]) {
   const totals = (basis: Basis) => ({

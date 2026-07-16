@@ -8,6 +8,7 @@ import {
   budgetLines,
   budgetPeriods,
   categories,
+  expenseComments,
   goals,
   households,
   householdMembers,
@@ -35,6 +36,15 @@ import {
 import { applyBatch, duplicatePeriod, loadLinesForCalc, provisionHousehold, recordAudit } from "./services";
 import { answerQuestion, generatePeriodInsights, runScenario } from "./insights";
 import { analyzeWorkbook, importWorkbook } from "./import";
+import {
+  addPayment,
+  editPayment,
+  markPaidInFull,
+  paymentHistory,
+  periodSettlement,
+  reversePayment,
+  softDeletePayment,
+} from "./payments";
 
 async function body<T = any>(req: Request): Promise<T> {
   try {
@@ -490,6 +500,71 @@ route("POST", "/import/workbook", async (req) => {
   const form = await req.formData();
   const file = form.get("file") as File;
   return json(await importWorkbook(ctx.db, ctx.householdId, await file.arrayBuffer(), ctx.userId));
+});
+
+// ── Payment tracking / settlement ─────────────────────────────────────────────
+route("GET", "/budget-periods/:id/settlement", async (req, params) => {
+  const ctx = await requireAuth(req);
+  const period = await getScoped(ctx.db.select().from(budgetPeriods).where(eq(budgetPeriods.id, Number(params.id))), ctx.householdId, "Budget period");
+  return json(await periodSettlement(ctx.db, ctx.householdId, period.id));
+});
+route("GET", "/reports/outstanding", async (req) => {
+  const ctx = await requireAuth(req);
+  const period = await resolvePeriod(ctx, qp(req, "period_id"));
+  if (!period) return json({ has_period: false });
+  return json({ has_period: true, ...(await periodSettlement(ctx.db, ctx.householdId, period.id)) });
+});
+route("POST", "/budget-lines/:id/payments", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  return json(await addPayment(ctx.db, ctx.householdId, ctx.userId, Number(params.id), await body(req)), 201);
+});
+route("GET", "/budget-lines/:id/payments", async (req, params) => {
+  const ctx = await requireAuth(req);
+  return json(await paymentHistory(ctx.db, ctx.householdId, Number(params.id)));
+});
+route("POST", "/budget-lines/:id/mark-paid", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  return json(await markPaidInFull(ctx.db, ctx.householdId, ctx.userId, Number(params.id), await body(req)), 201);
+});
+route("PATCH", "/payments/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  return json(await editPayment(ctx.db, ctx.householdId, ctx.userId, Number(params.id), await body(req)));
+});
+route("POST", "/payments/:id/reverse", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const p = await body(req);
+  return json(await reversePayment(ctx.db, ctx.householdId, ctx.userId, Number(params.id), p.reason));
+});
+route("DELETE", "/payments/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  return json(await softDeletePayment(ctx.db, ctx.householdId, ctx.userId, Number(params.id)));
+});
+route("PATCH", "/budget-lines/:id/payment-config", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const line = await getScoped(ctx.db.select().from(budgetLines).where(eq(budgetLines.id, Number(params.id))), ctx.householdId, "Line");
+  const p = await body(req);
+  const allowed: any = {};
+  for (const k of ["due_date", "responsible_member_id", "source_account_id", "is_debit_order", "is_manual_payment", "requires_confirmation", "manual_status", "priority"])
+    if (k in p) allowed[k] = p[k];
+  await ctx.db.update(budgetLines).set(allowed).where(eq(budgetLines.id, line.id));
+  await recordAudit(ctx.db, { action: "payment.config_changed", entity_type: "budget_line", entity_id: line.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: allowed });
+  return json((await ctx.db.select().from(budgetLines).where(eq(budgetLines.id, line.id))).at(0));
+});
+route("GET", "/budget-lines/:id/comments", async (req, params) => {
+  const ctx = await requireAuth(req);
+  const line = await getScoped(ctx.db.select().from(budgetLines).where(eq(budgetLines.id, Number(params.id))), ctx.householdId, "Line");
+  return json(await ctx.db.select().from(expenseComments).where(eq(expenseComments.budget_line_id, line.id)).orderBy(desc(expenseComments.created_at)));
+});
+route("POST", "/budget-lines/:id/comments", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const line = await getScoped(ctx.db.select().from(budgetLines).where(eq(budgetLines.id, Number(params.id))), ctx.householdId, "Line");
+  const p = await body(req);
+  const [c] = await ctx.db.insert(expenseComments).values({
+    budget_line_id: line.id, household_id: ctx.householdId, comment_text: p.comment_text,
+    comment_type: p.comment_type ?? "note", created_by: ctx.userId,
+  }).returning();
+  await recordAudit(ctx.db, { action: "comment.added", entity_type: "budget_line", entity_id: line.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: { comment_id: c.id } });
+  return json(c, 201);
 });
 
 // ── Health ────────────────────────────────────────────────────────────────────

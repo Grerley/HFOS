@@ -127,6 +127,46 @@ export const budgetLines = sqliteTable("budget_lines", {
   notes: text("notes"),
   source_ref: text("source_ref"),
   needs_review: integer("needs_review", { mode: "boolean" }).default(false).notNull(),
+  // ── Payment tracking / settlement ──
+  due_date: text("due_date"), // ISO date the payment is due (drives overdue + calendar)
+  responsible_member_id: integer("responsible_member_id"), // accountable person
+  source_account_id: integer("source_account_id"), // expected paying account
+  is_debit_order: integer("is_debit_order", { mode: "boolean" }).default(false).notNull(),
+  is_manual_payment: integer("is_manual_payment", { mode: "boolean" }).default(false).notNull(),
+  requires_confirmation: integer("requires_confirmation", { mode: "boolean" }).default(false).notNull(),
+  // Manual status override for non-derivable states: cancelled | not_applicable | scheduled.
+  manual_status: text("manual_status"),
+  created_at: ts(),
+  updated_at: tsu(),
+});
+
+export const paymentRecords = sqliteTable("payment_records", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  budget_line_id: integer("budget_line_id").notNull(),
+  household_id: integer("household_id").notNull(),
+  payment_date: text("payment_date").notNull(),
+  amount_cents: integer("amount_cents").notNull(),
+  payment_method: text("payment_method").default("eft").notNull(),
+  paid_by_member_id: integer("paid_by_member_id"),
+  source_account_id: integer("source_account_id"),
+  beneficiary: text("beneficiary"),
+  reference: text("reference"),
+  notes: text("notes"),
+  is_reversal: integer("is_reversal", { mode: "boolean" }).default(false).notNull(),
+  reversed_payment_record_id: integer("reversed_payment_record_id"),
+  created_by: integer("created_by"),
+  created_at: ts(),
+  updated_at: tsu(),
+  deleted_at: integer("deleted_at", { mode: "timestamp" }), // soft delete
+});
+
+export const expenseComments = sqliteTable("expense_comments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  budget_line_id: integer("budget_line_id").notNull(),
+  household_id: integer("household_id").notNull(),
+  comment_text: text("comment_text").notNull(),
+  comment_type: text("comment_type").default("note"),
+  created_by: integer("created_by"),
   created_at: ts(),
   updated_at: tsu(),
 });

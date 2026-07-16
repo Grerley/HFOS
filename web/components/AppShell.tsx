@@ -8,6 +8,7 @@ import type { Household } from "@/lib/types";
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: "◧" },
   { href: "/planner", label: "Monthly planner", icon: "▤" },
+  { href: "/payments", label: "Payments", icon: "✔" },
   { href: "/wealth", label: "Wealth & savings", icon: "◆" },
   { href: "/property", label: "Property", icon: "⌂" },
   { href: "/goals", label: "Goals", icon: "◎" },
