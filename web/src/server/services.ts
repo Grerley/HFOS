@@ -142,7 +142,15 @@ export async function duplicatePeriod(
   db: DB,
   householdId: number,
   source: typeof budgetPeriods.$inferSelect,
-  opts: { label: string; start_date: string; end_date: string; copy_ad_hoc: boolean },
+  opts: {
+    label: string;
+    start_date: string;
+    end_date: string;
+    copy_ad_hoc: boolean;
+    // Optional guided adjustments (decimals, e.g. 0.06 = +6%), applied to planned
+    // amounts on copy, scoped by category type. Undefined/0 leaves amounts unchanged.
+    adjust?: { income_pct?: number; expense_pct?: number; savings_pct?: number };
+  },
   actorUserId: number,
 ) {
   const [np] = await db
@@ -156,6 +164,19 @@ export async function duplicatePeriod(
       source: "duplicate",
     })
     .returning();
+
+  // Category types drive which adjustment (if any) applies to each line.
+  const cats = await db.select().from(categories).where(eq(categories.household_id, householdId));
+  const typeById = new Map(cats.map((c) => [c.id, c.type]));
+  const adj = opts.adjust ?? {};
+  const scaleFor = (categoryId: number, cents: number) => {
+    const t = typeById.get(categoryId);
+    let pct = 0;
+    if (t === "income") pct = adj.income_pct ?? 0;
+    else if (t === "saving" || t === "investment") pct = adj.savings_pct ?? 0;
+    else pct = adj.expense_pct ?? 0;
+    return pct ? Math.round(cents * (1 + pct)) : cents;
+  };
 
   const src = await db.select().from(budgetLines).where(eq(budgetLines.period_id, source.id));
   let copied = 0;
@@ -171,7 +192,7 @@ export async function duplicatePeriod(
         owner_member_id: line.owner_member_id,
         payer_member_id: line.payer_member_id,
         beneficiary_member_id: line.beneficiary_member_id,
-        planned_amount_cents: line.planned_amount_cents,
+        planned_amount_cents: scaleFor(line.category_id, line.planned_amount_cents),
         actual_amount_cents: 0,
         due_day: line.due_day,
         due_note: line.due_note,

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
 import { Button, Card, Input, Select, Badge, EmptyState, PageSkeleton } from "@/components/ui";
+import NewMonthWizard from "@/components/NewMonthWizard";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent, fromCents, toCents } from "@/lib/format";
 import type { Category, Line, Member, Period, PeriodSummary } from "@/lib/types";
@@ -22,6 +23,7 @@ export default function PlannerPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeSection, setActiveSection] = useState<number | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const period = periods.find((p) => p.id === periodId) || null;
   const currency = "ZAR";
   const locked = period?.status === "closed" || period?.status === "archived";
@@ -132,27 +134,7 @@ export default function PlannerPage() {
     }
   }
 
-  async function createPeriod() {
-    const label = prompt("Period label (e.g. Jan4Feb)");
-    if (!label) return;
-    const start = prompt("Start date (YYYY-MM-DD)", "2025-01-01");
-    const end = prompt("End date (YYYY-MM-DD)", "2025-02-28");
-    if (!start || !end) return;
-    const p = await api.post<Period>("/budget-periods", { label, start_date: start, end_date: end });
-    setPeriods((ps) => [p, ...ps]);
-    await selectPeriod(p.id);
-  }
-
-  async function duplicatePeriod() {
-    if (!period) return;
-    const label = prompt("New period label", period.label + " copy");
-    if (!label) return;
-    const start = prompt("Start date (YYYY-MM-DD)", period.start_date);
-    const end = prompt("End date (YYYY-MM-DD)", period.end_date);
-    if (!start || !end) return;
-    const p = await api.post<Period>(`/budget-periods/${period.id}/duplicate`, {
-      label, start_date: start, end_date: end, copy_ad_hoc: false,
-    });
+  async function onPeriodCreated(p: Period) {
     setPeriods((ps) => [p, ...ps]);
     await selectPeriod(p.id);
   }
@@ -191,16 +173,22 @@ export default function PlannerPage() {
       <PageHeader
         title="Monthly planner"
         description="Plan before spending. Every total is computed server-side."
-        actions={
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={createPeriod}>New period</Button>
-            {period && <Button variant="ghost" onClick={duplicatePeriod}>Duplicate</Button>}
-          </div>
-        }
+        actions={<Button onClick={() => setWizardOpen(true)}>New month</Button>}
+      />
+
+      <NewMonthWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        periods={periods}
+        currency={currency}
+        onCreated={onPeriodCreated}
       />
 
       {!periods.length ? (
-        <EmptyState title="No budget periods yet" hint="Create your first monthly period to begin planning." />
+        <div className="space-y-4">
+          <EmptyState title="No budget periods yet" hint="Create your first monthly period to begin planning." />
+          <div className="text-center"><Button onClick={() => setWizardOpen(true)}>New month</Button></div>
+        </div>
       ) : (
         <>
           <div className="mb-4 flex flex-wrap items-center gap-3">

@@ -1,127 +1,163 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
-import { Button, Card, Field, Input, Select, EmptyState, PageSkeleton } from "@/components/ui";
+import { Button, Card, Badge, EmptyState, PageSkeleton } from "@/components/ui";
+import ScenarioWizard from "@/components/ScenarioWizard";
 import { api } from "@/lib/api";
-import { formatMoney, formatPercent, toCents } from "@/lib/format";
+import { formatMoney, formatPercent } from "@/lib/format";
 import type { Period, Scenario } from "@/lib/types";
 
 export default function ScenariosPage() {
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [selected, setSelected] = useState<number[]>([]);
   const currency = "ZAR";
 
   async function load() {
     const [sc, ps] = await Promise.all([api.get<Scenario[]>("/scenarios"), api.get<Period[]>("/budget-periods")]);
     setScenarios(sc);
     setPeriods(ps);
+    setSelected(sc.slice(0, 3).map((s) => s.id));
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
 
-  async function createScenario(e: React.FormEvent) {
-    e.preventDefault();
-    const f = new FormData(e.target as HTMLFormElement);
-    const assumptions: Record<string, number> = {};
-    const incomePct = parseFloat(f.get("income_pct") as string);
-    const expensePct = parseFloat(f.get("expense_pct") as string);
-    const newExpense = f.get("new_expense") as string;
-    const saveInc = f.get("save_inc") as string;
-    if (incomePct) assumptions.income_change_pct = incomePct / 100;
-    if (expensePct) assumptions.expense_change_pct = expensePct / 100;
-    if (newExpense && Number(newExpense)) assumptions.new_monthly_expense_cents = toCents(newExpense);
-    if (saveInc && Number(saveInc)) assumptions.savings_increase_cents = toCents(saveInc);
-    await api.post<Scenario>("/scenarios", {
-      name: f.get("name"),
-      base_period_id: Number(f.get("base")) || null,
-      description: f.get("desc") || null,
-      assumptions_json: assumptions,
-    });
-    setShowForm(false);
-    await load();
+  function onCreated(s: Scenario) {
+    setScenarios((cur) => [s, ...cur]);
+    setSelected((cur) => [s.id, ...cur].slice(0, 3));
   }
 
+  function toggle(id: number) {
+    setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id].slice(-3)));
+  }
+
+  // Shared baseline (scenarios compared here should share a base period).
+  const money = (c: number) => formatMoney(c ?? 0, currency);
+  const compared = useMemo(() => scenarios.filter((s) => selected.includes(s.id)), [scenarios, selected]);
+  const baseline = compared[0]?.projected_results_json?.baseline ?? null;
+
   if (loading) return <AppShell><PageSkeleton /></AppShell>;
+
+  const METRICS: { key: string; label: string; pct?: boolean }[] = [
+    { key: "total_income_cents", label: "Income" },
+    { key: "total_expenses_cents", label: "Expenses" },
+    { key: "net_position_cents", label: "Net position" },
+    { key: "savings_rate", label: "Savings rate", pct: true },
+  ];
 
   return (
     <AppShell>
       <PageHeader
         title="Scenario simulator"
         description="Model a decision before committing. Scenarios never change your real budgets."
-        actions={<Button onClick={() => setShowForm((s) => !s)}>{showForm ? "Close" : "New scenario"}</Button>}
+        actions={<Button onClick={() => setWizardOpen(true)} disabled={!periods.length}>New scenario</Button>}
       />
 
-      {showForm && (
-        <Card className="mb-6" title="New scenario" subtitle="Leave a field at 0 to ignore it">
-          <form onSubmit={createScenario} className="grid grid-cols-2 gap-4 md:grid-cols-3">
-            <Field label="Name"><Input name="name" required /></Field>
-            <Field label="Base period">
-              <Select name="base" required>
-                {periods.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-              </Select>
-            </Field>
-            <Field label="Description"><Input name="desc" /></Field>
-            <Field label="Income change %"><Input name="income_pct" type="number" step="1" defaultValue="0" /></Field>
-            <Field label="Expense change %"><Input name="expense_pct" type="number" step="1" defaultValue="0" /></Field>
-            <Field label="New monthly expense"><Input name="new_expense" type="number" step="0.01" defaultValue="0" /></Field>
-            <Field label="Extra monthly savings"><Input name="save_inc" type="number" step="0.01" defaultValue="0" /></Field>
-            <div className="col-span-2 md:col-span-3"><Button type="submit">Run scenario</Button></div>
-          </form>
-        </Card>
-      )}
+      <ScenarioWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        periods={periods}
+        currency={currency}
+        onCreated={onCreated}
+      />
 
-      {!scenarios.length ? (
-        <EmptyState title="No scenarios yet" hint="Try 'What if income drops 20%?' or 'Can we afford a new bond?'" />
+      {!periods.length ? (
+        <EmptyState title="No budget periods yet" hint="Create a monthly budget first — scenarios build on a base month." />
+      ) : !scenarios.length ? (
+        <EmptyState title="No scenarios yet" hint="Try “What if income drops 20%?” or “Can we afford a new bond?”" />
       ) : (
-        <div className="space-y-4">
-          {scenarios.map((s) => {
-            const r = s.projected_results_json || {};
-            const base = r.baseline || {};
-            const proj = r.projected || {};
-            return (
-              <Card key={s.id} title={s.name} subtitle={s.description || undefined}>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-xs uppercase text-ink-muted">
-                        <th className="py-1">Metric</th>
-                        <th className="py-1 text-right">Baseline</th>
-                        <th className="py-1 text-right">Scenario</th>
-                        <th className="py-1 text-right">Delta</th>
-                      </tr>
-                    </thead>
-                    <tbody className="tabular">
-                      <Row label="Income" b={base.total_income_cents} s={proj.total_income_cents} currency={currency} />
-                      <Row label="Expenses" b={base.total_expenses_cents} s={proj.total_expenses_cents} currency={currency} />
-                      <Row label="Net position" b={base.net_position_cents} s={proj.net_position_cents} currency={currency} />
-                      <tr className="border-t border-line-soft">
-                        <td className="py-1.5">Savings rate</td>
-                        <td className="py-1.5 text-right">{formatPercent(base.savings_rate)}</td>
-                        <td className="py-1.5 text-right">{formatPercent(proj.savings_rate)}</td>
-                        <td className="py-1.5 text-right">{formatPercent((proj.savings_rate || 0) - (base.savings_rate || 0))}</td>
-                      </tr>
-                    </tbody>
-                  </table>
+        <div className="space-y-6">
+          {/* Comparison: baseline vs the selected scenarios side by side (A/B/C). */}
+          {compared.length > 0 && baseline && (
+            <Card
+              title="Compare scenarios"
+              subtitle="Baseline vs selected scenarios, side by side"
+              actions={<span className="text-xs text-ink-muted">Select up to 3 below</span>}
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase text-ink-muted">
+                      <th className="py-2 pr-4">Metric</th>
+                      <th className="py-2 pr-4 text-right">Baseline</th>
+                      {compared.map((s) => (
+                        <th key={s.id} className="py-2 pr-4 text-right">{s.name}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="tabular">
+                    {METRICS.map((m) => {
+                      const baseVal = baseline[m.key] ?? 0;
+                      return (
+                        <tr key={m.key} className="border-t border-line-soft">
+                          <td className="py-2 pr-4 font-medium text-ink-soft">{m.label}</td>
+                          <td className="py-2 pr-4 text-right text-ink">{m.pct ? formatPercent(baseVal) : money(baseVal)}</td>
+                          {compared.map((s) => {
+                            const proj = s.projected_results_json?.projected ?? {};
+                            const val = proj[m.key] ?? 0;
+                            const delta = val - baseVal;
+                            const isNet = m.key === "net_position_cents";
+                            return (
+                              <td key={s.id} className="py-2 pr-4 text-right">
+                                <div className={isNet ? (val >= 0 ? "text-positive" : "text-negative") : "text-ink"}>
+                                  {m.pct ? formatPercent(val) : money(val)}
+                                </div>
+                                {delta !== 0 && (
+                                  <div className={`text-xs ${delta >= 0 ? "text-positive" : "text-negative"}`}>
+                                    {m.pct
+                                      ? `${delta >= 0 ? "+" : ""}${formatPercent(delta)}`
+                                      : `${delta >= 0 ? "+" : "−"}${money(Math.abs(delta))}`}
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {/* Scenario library with select toggles */}
+          <div className="space-y-3">
+            {scenarios.map((s) => {
+              const r = s.projected_results_json || {};
+              const proj = r.projected || {};
+              const base = r.baseline || {};
+              const net = proj.net_position_cents ?? 0;
+              const netDelta = net - (base.net_position_cents ?? 0);
+              const isSel = selected.includes(s.id);
+              return (
+                <div key={s.id} className={`rounded-xl border bg-card p-4 shadow-sm transition ${isSel ? "border-brand" : "border-line"}`}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-ink">{s.name}</h3>
+                        {isSel && <Badge tone="info">comparing</Badge>}
+                      </div>
+                      {s.description && <p className="text-xs text-ink-muted">{s.description}</p>}
+                      <div className="mt-2 flex flex-wrap gap-4 text-xs text-ink-muted">
+                        <span>Net <span className={`tabular font-medium ${net >= 0 ? "text-positive" : "text-negative"}`}>{money(net)}</span></span>
+                        <span>vs baseline <span className={`tabular font-medium ${netDelta >= 0 ? "text-positive" : "text-negative"}`}>{netDelta >= 0 ? "+" : "−"}{money(Math.abs(netDelta))}</span></span>
+                        <span>Savings rate <span className="tabular font-medium text-ink">{formatPercent(proj.savings_rate ?? 0)}</span></span>
+                      </div>
+                    </div>
+                    <label className="flex shrink-0 items-center gap-2 text-xs font-medium text-ink-soft">
+                      <input type="checkbox" checked={isSel} onChange={() => toggle(s.id)} />
+                      Compare
+                    </label>
+                  </div>
                 </div>
-              </Card>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
     </AppShell>
-  );
-}
-
-function Row({ label, b, s, currency }: { label: string; b: number; s: number; currency: string }) {
-  const delta = (s || 0) - (b || 0);
-  return (
-    <tr className="border-t border-line-soft">
-      <td className="py-1.5">{label}</td>
-      <td className="py-1.5 text-right">{formatMoney(b, currency)}</td>
-      <td className="py-1.5 text-right">{formatMoney(s, currency)}</td>
-      <td className={`py-1.5 text-right ${delta >= 0 ? "text-positive" : "text-negative"}`}>{formatMoney(delta, currency)}</td>
-    </tr>
   );
 }

@@ -178,6 +178,47 @@ export function Drawer({ open, onClose, title, subtitle, children }: {
   );
 }
 
+// ── Modal (centered dialog for wizards & forms) ────────────────────────────────
+export function Modal({ open, onClose, title, subtitle, children, footer, wide }: {
+  open: boolean; onClose: () => void; title: string; subtitle?: string;
+  children: React.ReactNode; footer?: React.ReactNode; wide?: boolean;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className={`relative my-8 w-full ${wide ? "max-w-2xl" : "max-w-lg"} rounded-xl border border-line bg-card shadow-card`}>
+        <div className="flex items-start justify-between border-b border-line-soft px-5 py-4">
+          <div>
+            <h3 className="text-sm font-semibold text-ink">{title}</h3>
+            {subtitle && <p className="text-xs text-ink-muted">{subtitle}</p>}
+          </div>
+          <button onClick={onClose} aria-label="Close" className="rounded-lg px-2 py-1 text-ink-muted hover:bg-muted">✕</button>
+        </div>
+        <div className="px-5 py-4">{children}</div>
+        {footer && <div className="flex items-center justify-end gap-2 border-t border-line-soft px-5 py-3">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** Compact stepper header for multi-step wizards. */
+export function Steps({ steps, current }: { steps: string[]; current: number }) {
+  return (
+    <ol className="mb-4 flex items-center gap-2 text-xs">
+      {steps.map((s, i) => (
+        <li key={s} className="flex items-center gap-2">
+          <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold ${
+            i < current ? "bg-brand text-brand-fg" : i === current ? "bg-brand-light text-brand-dark ring-1 ring-brand" : "bg-muted text-ink-muted"
+          }`}>{i < current ? "✓" : i + 1}</span>
+          <span className={i === current ? "font-medium text-ink" : "text-ink-muted"}>{s}</span>
+          {i < steps.length - 1 && <span className="mx-1 text-ink-muted">›</span>}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /** A single "amount = calculation" row used inside drill-down drawers. */
 export function DrillRow({ label, value, tone, strong }: { label: string; value: string; tone?: "positive" | "negative"; strong?: boolean }) {
   const c = tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : "text-ink";

@@ -255,7 +255,10 @@ route("POST", "/budget-periods/:id/duplicate", async (req, params) => {
   const ctx = await requireAuth(req); requireWrite(ctx);
   const p = await body(req);
   const source = await getScoped(ctx.db.select().from(budgetPeriods).where(eq(budgetPeriods.id, Number(params.id))), ctx.householdId, "Budget period");
-  const np = await duplicatePeriod(ctx.db, ctx.householdId, source, { label: p.label, start_date: p.start_date, end_date: p.end_date, copy_ad_hoc: p.copy_ad_hoc ?? false }, ctx.userId);
+  const np = await duplicatePeriod(ctx.db, ctx.householdId, source, {
+    label: p.label, start_date: p.start_date, end_date: p.end_date, copy_ad_hoc: p.copy_ad_hoc ?? false,
+    adjust: p.adjust ?? undefined,
+  }, ctx.userId);
   return json(np, 201);
 });
 route("PATCH", "/budget-periods/:id/status", async (req, params) => {
