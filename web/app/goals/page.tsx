@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
-import { Button, Card, Field, Input, EmptyState, PageSkeleton } from "@/components/ui";
+import { Button, Card, Field, Input, EmptyState, PageSkeleton, ErrorState } from "@/components/ui";
 import { ProgressBar } from "@/components/viz";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent, toCents } from "@/lib/format";
@@ -10,12 +10,20 @@ import type { Goal } from "@/lib/types";
 export default function GoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const currency = "ZAR";
 
   async function load() {
-    setGoals(await api.get<Goal[]>("/goals"));
-    setLoading(false);
+    setLoading(true);
+    setError(false);
+    try {
+      setGoals(await api.get<Goal[]>("/goals"));
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 
@@ -35,6 +43,12 @@ export default function GoalsPage() {
   }
 
   if (loading) return <AppShell><PageSkeleton /></AppShell>;
+  if (error) return (
+    <AppShell>
+      <PageHeader title="Goals" description="Target, deadline and the monthly contribution needed to get there." />
+      <ErrorState hint="We couldn't load your goals. Check your connection and try again." onRetry={load} />
+    </AppShell>
+  );
 
   return (
     <AppShell>

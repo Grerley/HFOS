@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
-import { Button, Card, Field, Input, Select, Badge } from "@/components/ui";
+import { Button, Card, Field, Input, Select, Badge, PageSkeleton, ErrorState } from "@/components/ui";
 import { api } from "@/lib/api";
 import { formatMoney, toCents } from "@/lib/format";
 import type { Category, Member } from "@/lib/types";
@@ -12,14 +12,24 @@ export default function SettingsPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   async function load() {
-    const [m, a, c] = await Promise.all([
-      api.get<Member[]>("/members"),
-      api.get<Account[]>("/accounts"),
-      api.get<Category[]>("/categories"),
-    ]);
-    setMembers(m); setAccounts(a); setCategories(c);
+    setLoading(true);
+    setError(false);
+    try {
+      const [m, a, c] = await Promise.all([
+        api.get<Member[]>("/members"),
+        api.get<Account[]>("/accounts"),
+        api.get<Category[]>("/categories"),
+      ]);
+      setMembers(m); setAccounts(a); setCategories(c);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 
@@ -59,6 +69,14 @@ export default function SettingsPage() {
   }
 
   const sections = categories.filter((c) => c.is_section);
+
+  if (loading) return <AppShell><PageSkeleton /></AppShell>;
+  if (error) return (
+    <AppShell>
+      <PageHeader title="Settings" description="Manage members, accounts and categories." />
+      <ErrorState hint="We couldn't load your settings. Check your connection and try again." onRetry={load} />
+    </AppShell>
+  );
 
   return (
     <AppShell>

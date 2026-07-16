@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
-import { Button, Card, Field, Input, Select, EmptyState, PageSkeleton, StatCard, Badge } from "@/components/ui";
+import { Button, Card, Field, Input, Select, EmptyState, PageSkeleton, StatCard, Badge, ErrorState } from "@/components/ui";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent, toCents } from "@/lib/format";
 import type { Property } from "@/lib/types";
@@ -10,17 +10,25 @@ export default function PropertyPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [flows, setFlows] = useState<Record<number, any>>({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const currency = "ZAR";
 
   async function load() {
-    const props = await api.get<Property[]>("/properties");
-    setProperties(props);
-    const entries = await Promise.all(
-      props.map(async (p) => [p.id, await api.get<any>(`/properties/${p.id}/cash-flow`)] as const)
-    );
-    setFlows(Object.fromEntries(entries));
-    setLoading(false);
+    setLoading(true);
+    setError(false);
+    try {
+      const props = await api.get<Property[]>("/properties");
+      setProperties(props);
+      const entries = await Promise.all(
+        props.map(async (p) => [p.id, await api.get<any>(`/properties/${p.id}/cash-flow`)] as const)
+      );
+      setFlows(Object.fromEntries(entries));
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 
@@ -52,6 +60,12 @@ export default function PropertyPage() {
   }
 
   if (loading) return <AppShell><PageSkeleton /></AppShell>;
+  if (error) return (
+    <AppShell>
+      <PageHeader title="Property portfolio" description="Per-property cash flow, yield and loan-to-value." />
+      <ErrorState hint="We couldn't load your properties. Check your connection and try again." onRetry={load} />
+    </AppShell>
+  );
 
   return (
     <AppShell>

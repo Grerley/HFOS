@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
-import { Card, StatCard, EmptyState, PageSkeleton, Badge } from "@/components/ui";
+import { Card, StatCard, EmptyState, PageSkeleton, Badge, ErrorState } from "@/components/ui";
 import { ProgressBar } from "@/components/viz";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent } from "@/lib/format";
@@ -14,10 +14,13 @@ export default function WealthPage() {
   const [savingsLines, setSavingsLines] = useState<Line[]>([]);
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const currency = dash?.currency || "ZAR";
 
-  useEffect(() => {
-    (async () => {
+  async function load() {
+    setLoading(true);
+    setError(false);
+    try {
       const [d, periods, cats, accs] = await Promise.all([
         api.get<DashboardResponse>("/dashboard"),
         api.get<Period[]>("/budget-periods"),
@@ -31,11 +34,22 @@ export default function WealthPage() {
         const lines = await api.get<Line[]>(`/budget-periods/${periods[0].id}/lines`);
         setSavingsLines(lines.filter((l) => savingCatIds.has(l.category_id)));
       }
+    } catch {
+      setError(true);
+    } finally {
       setLoading(false);
-    })();
-  }, []);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
 
   if (loading) return <AppShell><PageSkeleton /></AppShell>;
+  if (error) return (
+    <AppShell>
+      <PageHeader title="Wealth & savings" description="Savings and investments are budgeted obligations, not leftover cash." />
+      <ErrorState hint="We couldn't load your wealth data. Check your connection and try again." onRetry={load} />
+    </AppShell>
+  );
   const p = dash?.summary?.planned;
   const investmentAccounts = accounts.filter((a) => ["investment", "savings_pocket"].includes(a.type));
 

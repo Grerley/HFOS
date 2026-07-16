@@ -59,7 +59,7 @@ export default function ImportPage() {
           <Button onClick={runImport} disabled={!file || busy}>{busy ? "Working…" : "Import"}</Button>
         </div>
         <p className="mt-2 text-xs text-ink-muted">
-          A synthetic sample workbook is generated at <code>backend/data/sample_workbook.xlsx</code> for testing.
+          Analyze previews sheets and detected owners without writing anything. Import is idempotent — re-running never duplicates periods.
         </p>
       </Card>
 
@@ -123,7 +123,7 @@ export default function ImportPage() {
             <div className="mt-4">
               <p className="mb-2 text-sm font-medium text-ink">Review queue</p>
               {report.review_queue.map((q: any, i: number) => (
-                <div key={i} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <div key={i} className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
                   {q.sheet}: {q.reason} — {q.action}
                 </div>
               ))}
