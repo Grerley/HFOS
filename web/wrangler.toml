@@ -15,8 +15,16 @@ database_name = "hfos-db"
 database_id = "bd46243a-954d-4465-98ac-7f91e230661b"
 migrations_dir = "migrations"
 
+# Workers AI — native LLM binding, no API key/secret to manage. Powers the
+# copilot's natural-language phrasing (numbers still come from the calc engine).
+[ai]
+binding = "AI"
+
 # Non-secret vars. Secrets (HFOS_SECRET_KEY, HFOS_ENCRYPTION_KEY) are set with
 #   wrangler secret put HFOS_SECRET_KEY
 # or in the dashboard → Worker → Settings → Variables (encrypted).
+#
+# HFOS_COPILOT_PROVIDER: "workers-ai" (default, native, zero-secret),
+#   "anthropic" (set ANTHROPIC_API_KEY secret for higher quality), or "rules".
 [vars]
-HFOS_COPILOT_PROVIDER = "rules"
+HFOS_COPILOT_PROVIDER = "workers-ai"

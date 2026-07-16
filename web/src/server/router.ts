@@ -34,7 +34,7 @@ import {
   requireWrite,
 } from "./context";
 import { applyBatch, duplicatePeriod, loadLinesForCalc, provisionHousehold, recordAudit } from "./services";
-import { answerQuestion, generatePeriodInsights, runScenario } from "./insights";
+import { generatePeriodInsights, runScenario } from "./insights";
 import { analyzeWorkbook, importWorkbook } from "./import";
 import {
   addPayment,
@@ -47,6 +47,7 @@ import {
   softDeletePayment,
 } from "./payments";
 import { cashFlowForecast } from "./cashflow";
+import { copilotAnswer } from "./copilot";
 
 async function body<T = any>(req: Request): Promise<T> {
   try {
@@ -497,7 +498,7 @@ route("POST", "/copilot/ask", async (req) => {
   const ctx = await requireAuth(req);
   const p = await body(req);
   const period = await resolvePeriod(ctx, p.period_id != null ? String(p.period_id) : null);
-  return json(await answerQuestion(ctx.db, ctx.householdId, p.question ?? "", period ? period.id : null));
+  return json(await copilotAnswer(getEnv(), ctx.db, ctx.householdId, p.question ?? "", period ? period.id : null));
 });
 
 // ── Import ────────────────────────────────────────────────────────────────────

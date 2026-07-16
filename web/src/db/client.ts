@@ -7,6 +7,10 @@ export interface Env {
   HFOS_SECRET_KEY?: string;
   HFOS_ENCRYPTION_KEY?: string;
   HFOS_COPILOT_PROVIDER?: string;
+  // Workers AI binding (native, no secret) — present when [ai] is bound in wrangler.
+  AI?: unknown;
+  // Optional higher-quality provider; set as an encrypted secret to enable.
+  ANTHROPIC_API_KEY?: string;
 }
 
 export type DB = DrizzleD1Database<typeof schema>;

@@ -91,13 +91,21 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
+// POSTs that are query-like (not mutations) — never queue these for replay.
+const NON_QUEUEABLE = ["/copilot/ask", "/import/workbook/analyze"];
+
 async function mutate<T>(method: string, path: string, body?: unknown): Promise<T> {
   try {
     return await request<T>(path, { method, body: body != null ? JSON.stringify(body) : undefined });
   } catch (err) {
     // Only queue genuine offline/network failures — real server errors propagate.
     if (err instanceof ApiError) throw err;
-    if (isNetworkError(err)) return queueOrThrow<T>(method, path, body ?? null);
+    if (isNetworkError(err)) {
+      if (NON_QUEUEABLE.some((p) => path.startsWith(p))) {
+        throw new OfflineError("You're offline — reconnect to use this.");
+      }
+      return queueOrThrow<T>(method, path, body ?? null);
+    }
     throw err;
   }
 }

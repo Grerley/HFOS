@@ -4,7 +4,13 @@ import AppShell, { PageHeader } from "@/components/AppShell";
 import { Button, Card, Input, Badge } from "@/components/ui";
 import { api } from "@/lib/api";
 
-interface Turn { q: string; a: string; intent: string; provider: string; citations: any[]; }
+interface Turn { q: string; a: string; intent: string; provider: string; citations: any[]; degraded?: boolean; }
+
+const PROVIDER_LABEL: Record<string, string> = {
+  "workers-ai": "Workers AI",
+  anthropic: "Claude",
+  rules: "rule engine",
+};
 
 const SUGGESTIONS = [
   "Can we afford this decision?",
@@ -25,7 +31,7 @@ export default function CopilotPage() {
     setBusy(true);
     try {
       const res = await api.post<any>("/copilot/ask", { question });
-      setTurns((t) => [{ q: question, a: res.answer, intent: res.matched_intent, provider: res.provider, citations: res.citations }, ...t]);
+      setTurns((t) => [{ q: question, a: res.answer, intent: res.matched_intent, provider: res.provider, citations: res.citations ?? [], degraded: res.degraded }, ...t]);
       setQ("");
     } catch (e: any) {
       setTurns((t) => [{ q: question, a: "Error: " + e.message, intent: "error", provider: "rules", citations: [] }, ...t]);
@@ -57,18 +63,19 @@ export default function CopilotPage() {
           <Card key={i}>
             <p className="text-sm font-semibold text-ink">{t.q}</p>
             <p className="mt-2 text-sm text-ink-soft">{t.a}</p>
-            <div className="mt-3 flex items-center gap-2">
-              <Badge tone="info">intent: {t.intent}</Badge>
-              <Badge>provider: {t.provider}</Badge>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Badge tone="info">{PROVIDER_LABEL[t.provider] ?? t.provider}</Badge>
               {t.citations.length > 0 && <Badge tone="positive">grounded in calc engine</Badge>}
+              {t.degraded && <Badge tone="warning">AI unavailable — rule engine</Badge>}
             </div>
           </Card>
         ))}
         {!turns.length && (
           <p className="text-sm text-ink-muted">
-            The first release uses an explainable rule-based engine. The architecture leaves a typed
-            provider seam for a future LLM, which would still call the deterministic calculation tools
-            for any number.
+            Ask in plain language. The copilot phrases its answer with an LLM (Cloudflare Workers AI by
+            default), but every figure it quotes is computed by the deterministic calculation engine and
+            passed in as grounded facts — the model never does the maths. If the model is unavailable, it
+            falls back to the explainable rule engine automatically.
           </p>
         )}
       </div>
