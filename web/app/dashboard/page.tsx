@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
-import { Card, StatCard, Badge, EmptyState, Spinner } from "@/components/ui";
+import Link from "next/link";
+import { Card, StatCard, Badge, EmptyState, PageSkeleton } from "@/components/ui";
 import { CategoryBars, TrendChart } from "@/components/viz";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent } from "@/lib/format";
@@ -11,26 +12,29 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [insights, setInsights] = useState<Insight[]>([]);
   const [trend, setTrend] = useState<any[]>([]);
+  const [settle, setSettle] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const [d, ins, tr] = await Promise.all([
+        const [d, ins, tr, st] = await Promise.all([
           api.get<DashboardResponse>("/dashboard"),
           api.get<Insight[]>("/insights").catch(() => []),
           api.get<{ series: any[] }>("/reports/trends").catch(() => ({ series: [] })),
+          api.get<any>("/reports/outstanding").catch(() => null),
         ]);
         setData(d);
         setInsights(ins);
         setTrend(tr.series);
+        setSettle(st?.has_period ? st : null);
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
-  if (loading) return <AppShell><Spinner /></AppShell>;
+  if (loading) return <AppShell><PageSkeleton /></AppShell>;
 
   if (!data?.has_period) {
     return (
@@ -47,6 +51,25 @@ export default function DashboardPage() {
   const currency = data.currency || "ZAR";
   const p = data.summary!.planned;
   const netTone = p.net_position_cents >= 0 ? "positive" : "negative";
+  const sm = settle?.summary ?? null;
+
+  const briefing = (() => {
+    const bits: string[] = [];
+    bits.push(
+      p.net_position_cents >= 0
+        ? `Your household is broadly on track — a planned surplus of ${formatMoney(p.net_position_cents, currency)} this month`
+        : `Heads up: planned expenses exceed income by ${formatMoney(-p.net_position_cents, currency)} this month`,
+    );
+    if (sm) {
+      if (sm.total_outstanding_cents > 0)
+        bits.push(`${formatMoney(sm.total_outstanding_cents, currency)} is still outstanding across ${sm.line_count} obligations`);
+      if (sm.overdue_count > 0) bits.push(`${sm.overdue_count} overdue`);
+      if (sm.debit_pending_count > 0) bits.push(`${sm.debit_pending_count} debit order${sm.debit_pending_count === 1 ? "" : "s"} to confirm`);
+      if (sm.manual_remaining_count > 0) bits.push(`${sm.manual_remaining_count} manual payment${sm.manual_remaining_count === 1 ? "" : "s"} still to make`);
+    }
+    bits.push(`Savings rate is ${formatPercent(p.savings_rate)}`);
+    return bits.join(". ") + ".";
+  })();
 
   return (
     <AppShell>
@@ -55,6 +78,39 @@ export default function DashboardPage() {
         description={`${data.period!.label} · ${data.period!.status}`}
         actions={<Badge tone="info">Formula v{data.summary!.formula_version}</Badge>}
       />
+
+      {/* AI CFO briefing (§9.5) — concise, explainable, non-alarmist, actionable. */}
+      <div className="mb-5 rounded-xl border border-line bg-card p-5 shadow-sm">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-light text-ai" aria-hidden>✦</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-ink">CFO briefing</h3>
+              <Badge tone="info">rule-based</Badge>
+            </div>
+            <p className="mt-1 text-sm text-ink-soft">{briefing}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link href="/payments" className="rounded-lg border border-line px-3 py-1 text-xs font-medium text-ink-soft hover:bg-muted">Review payments</Link>
+              <Link href="/copilot" className="rounded-lg border border-line px-3 py-1 text-xs font-medium text-ink-soft hover:bg-muted">Ask HFOS</Link>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Payment settlement status (§9.4) — month-to-date operational reality. */}
+      {sm && (
+        <Card className="mb-5" title="Payment settlement status" subtitle="Where this month's obligations stand"
+          actions={<Link href="/payments" className="text-xs font-medium text-brand-dark hover:underline">Open Payments →</Link>}>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <MiniStat label="Planned" value={formatMoney(sm.total_planned_cents, currency)} />
+            <MiniStat label="Paid" value={formatMoney(sm.total_paid_cents, currency)} tone="positive" />
+            <MiniStat label="Outstanding" value={formatMoney(sm.total_outstanding_cents, currency)} tone={sm.total_outstanding_cents > 0 ? "negative" : undefined} />
+            <MiniStat label="Overdue" value={formatMoney(sm.total_overdue_cents, currency)} tone={sm.total_overdue_cents > 0 ? "negative" : undefined} hint={`${sm.overdue_count} item${sm.overdue_count === 1 ? "" : "s"}`} />
+            <MiniStat label="Debit pending" value={String(sm.debit_pending_count)} />
+            <MiniStat label="Manual left" value={String(sm.manual_remaining_count)} />
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Income" value={formatMoney(p.total_income_cents, currency)} />
@@ -87,7 +143,7 @@ export default function DashboardPage() {
         <Card title="Owner contributions" subtitle="Income, responsibility and net by member">
           <div className="space-y-3">
             {(data.owner_cards || []).map((o) => (
-              <div key={o.member_id} className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3">
+              <div key={o.member_id} className="flex items-center justify-between rounded-lg bg-muted px-4 py-3">
                 <span className="text-sm font-medium text-ink">{o.member_name}</span>
                 <div className="tabular flex gap-4 text-xs text-ink-muted">
                   <span>In {formatMoney(o.income_cents, currency)}</span>
@@ -116,7 +172,7 @@ export default function DashboardPage() {
         <Card title="Insights & alerts" subtitle="Explainable, rule-based">
           <div className="space-y-3">
             {insights.slice(0, 5).map((i) => (
-              <div key={i.id} className="rounded-lg border border-slate-100 p-3">
+              <div key={i.id} className="rounded-lg border border-line-soft p-3">
                 <div className="mb-1 flex items-center justify-between">
                   <Badge tone={i.severity}>{i.severity}</Badge>
                 </div>
@@ -129,5 +185,16 @@ export default function DashboardPage() {
         </Card>
       </div>
     </AppShell>
+  );
+}
+
+function MiniStat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: "positive" | "negative" }) {
+  const c = tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : "text-ink";
+  return (
+    <div className="rounded-lg border border-line-soft bg-muted px-3 py-2.5">
+      <div className="text-xs text-ink-muted">{label}</div>
+      <div className={`tabular text-base font-semibold ${c}`}>{value}</div>
+      {hint && <div className="text-xs text-ink-muted">{hint}</div>}
+    </div>
   );
 }

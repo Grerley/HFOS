@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
-import { Button, Card, Field, Input, Select, EmptyState, Spinner } from "@/components/ui";
+import { Button, Card, Field, Input, Select, EmptyState, PageSkeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent, toCents } from "@/lib/format";
 import type { Period, Scenario } from "@/lib/types";
@@ -43,7 +43,7 @@ export default function ScenariosPage() {
     await load();
   }
 
-  if (loading) return <AppShell><Spinner /></AppShell>;
+  if (loading) return <AppShell><PageSkeleton /></AppShell>;
 
   return (
     <AppShell>
@@ -96,7 +96,7 @@ export default function ScenariosPage() {
                       <Row label="Income" b={base.total_income_cents} s={proj.total_income_cents} currency={currency} />
                       <Row label="Expenses" b={base.total_expenses_cents} s={proj.total_expenses_cents} currency={currency} />
                       <Row label="Net position" b={base.net_position_cents} s={proj.net_position_cents} currency={currency} />
-                      <tr className="border-t border-slate-100">
+                      <tr className="border-t border-line-soft">
                         <td className="py-1.5">Savings rate</td>
                         <td className="py-1.5 text-right">{formatPercent(base.savings_rate)}</td>
                         <td className="py-1.5 text-right">{formatPercent(proj.savings_rate)}</td>
@@ -117,7 +117,7 @@ export default function ScenariosPage() {
 function Row({ label, b, s, currency }: { label: string; b: number; s: number; currency: string }) {
   const delta = (s || 0) - (b || 0);
   return (
-    <tr className="border-t border-slate-100">
+    <tr className="border-t border-line-soft">
       <td className="py-1.5">{label}</td>
       <td className="py-1.5 text-right">{formatMoney(b, currency)}</td>
       <td className="py-1.5 text-right">{formatMoney(s, currency)}</td>

@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
-import { Button, Card, Input, Select, Badge, EmptyState, Spinner } from "@/components/ui";
+import { Button, Card, Input, Select, Badge, EmptyState, PageSkeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent, fromCents, toCents } from "@/lib/format";
 import type { Category, Line, Member, Period, PeriodSummary } from "@/lib/types";
@@ -169,7 +169,7 @@ export default function PlannerPage() {
     alert("Insights generated — see the Dashboard.");
   }
 
-  if (loading && !periods.length) return <AppShell><Spinner /></AppShell>;
+  if (loading && !periods.length) return <AppShell><PageSkeleton /></AppShell>;
 
   const catName = (id: number) => catMap.get(id)?.name || "—";
   const dirty = rows.some((r) => r._dirty || r._new) || deletes.length > 0;
@@ -247,7 +247,7 @@ export default function PlannerPage() {
             }
           >
             {/* Section tabs */}
-            <div className="mb-4 flex flex-wrap gap-1 border-b border-slate-200">
+            <div className="mb-4 flex flex-wrap gap-1 border-b border-line">
               {tabs.map((t) => {
                 const active = t.id === activeSection;
                 return (
@@ -262,7 +262,7 @@ export default function PlannerPage() {
                   >
                     {t.type === "income" && <span className="text-positive">▲</span>}
                     {t.name}
-                    <span className={`rounded-full px-1.5 text-xs ${active ? "bg-brand-light text-brand-dark" : "bg-slate-100 text-ink-muted"}`}>
+                    <span className={`rounded-full px-1.5 text-xs ${active ? "bg-brand-light text-brand-dark" : "bg-muted text-ink-muted"}`}>
                       {countFor(t.id)}
                     </span>
                   </button>
@@ -273,7 +273,7 @@ export default function PlannerPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 text-left text-xs uppercase text-ink-muted">
+                  <tr className="border-b border-line text-left text-xs uppercase text-ink-muted">
                     <th className="py-2 pr-3">Item</th>
                     <th className="py-2 pr-3">Category</th>
                     <th className="py-2 pr-3">Owner</th>
@@ -285,7 +285,7 @@ export default function PlannerPage() {
                 </thead>
                 <tbody>
                   {visibleRows.map((r) => (
-                    <tr key={r.id} className="border-b border-slate-50">
+                    <tr key={r.id} className="border-b border-line-soft">
                       <td className="py-1.5 pr-3">
                         {locked ? r.item_name : (
                           <Input value={r.item_name} onChange={(e) => editRow(r.id, { item_name: e.target.value })} className="min-w-[10rem]" />
@@ -340,7 +340,7 @@ export default function PlannerPage() {
                     </tr>
                   ))}
                   {visibleRows.length > 0 && (
-                    <tr className="border-t-2 border-slate-200 font-medium">
+                    <tr className="border-t-2 border-line font-medium">
                       <td className="py-2 pr-3 text-ink-muted" colSpan={3}>{activeName} subtotal (planned)</td>
                       <td className="tabular py-2 pr-3 text-right">{formatMoney(plannedFor(activeSection), currency)}</td>
                       <td colSpan={3}></td>
@@ -364,7 +364,7 @@ export default function PlannerPage() {
 function SummaryTile({ label, value, tone }: { label: string; value: string; tone?: "positive" | "negative" }) {
   const color = tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : "text-ink";
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+    <div className="rounded-lg border border-line bg-card px-4 py-3">
       <div className="text-xs text-ink-muted">{label}</div>
       <div className={`tabular text-lg font-semibold ${color}`}>{value}</div>
     </div>

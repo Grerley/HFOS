@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
-import { Card, StatCard, EmptyState, Spinner, Badge } from "@/components/ui";
+import { Card, StatCard, EmptyState, PageSkeleton, Badge } from "@/components/ui";
 import { ProgressBar } from "@/components/viz";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent } from "@/lib/format";
@@ -35,7 +35,7 @@ export default function WealthPage() {
     })();
   }, []);
 
-  if (loading) return <AppShell><Spinner /></AppShell>;
+  if (loading) return <AppShell><PageSkeleton /></AppShell>;
   const p = dash?.summary?.planned;
   const investmentAccounts = accounts.filter((a) => ["investment", "savings_pocket"].includes(a.type));
 
@@ -54,7 +54,7 @@ export default function WealthPage() {
           {savingsLines.length ? (
             <div className="space-y-2">
               {savingsLines.map((l) => (
-                <div key={l.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-2.5">
+                <div key={l.id} className="flex items-center justify-between rounded-lg bg-muted px-4 py-2.5">
                   <span className="text-sm text-ink">{l.item_name}</span>
                   <span className="tabular text-sm font-medium">{formatMoney(l.planned_amount_cents, currency)}</span>
                 </div>
@@ -69,7 +69,7 @@ export default function WealthPage() {
           {investmentAccounts.length ? (
             <div className="space-y-2">
               {investmentAccounts.map((a) => (
-                <div key={a.id} className="flex items-center justify-between rounded-lg border border-slate-100 px-4 py-2.5">
+                <div key={a.id} className="flex items-center justify-between rounded-lg border border-line-soft px-4 py-2.5">
                   <div>
                     <div className="text-sm font-medium text-ink">{a.name}</div>
                     <Badge>{a.type}</Badge>

@@ -45,7 +45,7 @@ export default function CopilotPage() {
         </form>
         <div className="mt-3 flex flex-wrap gap-2">
           {SUGGESTIONS.map((s) => (
-            <button key={s} onClick={() => ask(s)} className="rounded-full border border-slate-200 px-3 py-1 text-xs text-ink-soft hover:bg-slate-50">
+            <button key={s} onClick={() => ask(s)} className="rounded-full border border-line px-3 py-1 text-xs text-ink-soft hover:bg-muted">
               {s}
             </button>
           ))}

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
-import { Button, Card, Field, Input, EmptyState, Spinner } from "@/components/ui";
+import { Button, Card, Field, Input, EmptyState, PageSkeleton } from "@/components/ui";
 import { ProgressBar } from "@/components/viz";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent, toCents } from "@/lib/format";
@@ -34,7 +34,7 @@ export default function GoalsPage() {
     await load();
   }
 
-  if (loading) return <AppShell><Spinner /></AppShell>;
+  if (loading) return <AppShell><PageSkeleton /></AppShell>;
 
   return (
     <AppShell>

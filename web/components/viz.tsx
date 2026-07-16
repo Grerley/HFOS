@@ -8,7 +8,7 @@ export function ProgressBar({ value, tone = "brand" }: { value: number; tone?: s
   const pct = Math.max(0, Math.min(1, value)) * 100;
   const color = tone === "positive" ? "bg-positive" : tone === "negative" ? "bg-negative" : "bg-brand";
   return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
       <div className={`h-full ${color}`} style={{ width: `${pct}%` }} />
     </div>
   );
@@ -33,7 +33,7 @@ export function CategoryBars({
               {format(r.amount_cents)} · {(r.pct_of_expenses * 100).toFixed(1)}%
             </span>
           </div>
-          <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+          <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
             <div className="h-full bg-brand" style={{ width: `${(r.amount_cents / max) * 100}%` }} />
           </div>
         </div>
@@ -67,7 +67,7 @@ export function TrendChart({
       <path d={line("expenses_cents")} fill="none" stroke="#b91c1c" strokeWidth={2} />
       <path d={line("net_cents")} fill="none" stroke="#0e7490" strokeWidth={2} strokeDasharray="4 3" />
       {series.map((s, i) => (
-        <text key={i} x={x(i)} y={h - 6} textAnchor="middle" className="fill-slate-400 text-[9px]">
+        <text key={i} x={x(i)} y={h - 6} textAnchor="middle" className="fill-current text-ink-muted text-[9px]">
           {s.label.length > 7 ? s.label.slice(0, 7) : s.label}
         </text>
       ))}

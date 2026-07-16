@@ -68,7 +68,7 @@ export default function SettingsPage() {
         <Card title="Household members">
           <div className="mb-4 space-y-2">
             {members.map((m) => (
-              <div key={m.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-2">
+              <div key={m.id} className="flex items-center justify-between rounded-lg bg-muted px-4 py-2">
                 <span className="text-sm">{m.name} <span className="text-xs text-ink-muted">· {m.relationship_label || "member"}</span></span>
                 <Badge>{m.role}</Badge>
               </div>
@@ -100,7 +100,7 @@ export default function SettingsPage() {
         <Card title="Accounts">
           <div className="mb-4 space-y-2">
             {accounts.map((a) => (
-              <div key={a.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-2">
+              <div key={a.id} className="flex items-center justify-between rounded-lg bg-muted px-4 py-2">
                 <span className="text-sm">{a.name} <span className="text-xs text-ink-muted">· {a.type}</span></span>
                 <span className="tabular text-sm">{formatMoney(a.current_balance_cents)}</span>
               </div>
@@ -119,7 +119,7 @@ export default function SettingsPage() {
         <Card title="Category taxonomy" subtitle="Default sections from the workbook (editable)">
           <div className="space-y-2">
             {sections.map((s) => (
-              <div key={s.id} className="rounded-lg border border-slate-100 px-4 py-2">
+              <div key={s.id} className="rounded-lg border border-line-soft px-4 py-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">{s.name}</span>
                   <Badge tone="info">{s.type}</Badge>

@@ -73,7 +73,7 @@ export default function ImportPage() {
             </thead>
             <tbody>
               {analysis.sheets.map((s: any, i: number) => (
-                <tr key={i} className="border-t border-slate-100">
+                <tr key={i} className="border-t border-line-soft">
                   <td className="py-1.5">{s.sheet}</td>
                   <td className="py-1.5"><Badge tone={s.kind === "monthly" ? "positive" : "neutral"}>{s.kind}</Badge></td>
                   <td className="py-1.5 text-xs text-ink-muted">{(s.owners || []).join(", ")}</td>
@@ -105,7 +105,7 @@ export default function ImportPage() {
                   const incOk = r.workbook_total_income_cents === r.imported_total_income_cents;
                   const expOk = r.workbook_total_expenses_cents === r.imported_total_expenses_cents;
                   return (
-                    <tr key={i} className="border-t border-slate-100 tabular">
+                    <tr key={i} className="border-t border-line-soft tabular">
                       <td className="py-1.5">{r.sheet}</td>
                       <td className={`py-1.5 text-right ${incOk ? "text-positive" : "text-negative"}`}>
                         {formatMoney(r.workbook_total_income_cents)} → {formatMoney(r.imported_total_income_cents)} {incOk ? "✓" : "✕"}
@@ -139,7 +139,7 @@ export default function ImportPage() {
 
 function Tile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+    <div className="rounded-lg border border-line bg-card px-4 py-3">
       <div className="text-xs text-ink-muted">{label}</div>
       <div className="tabular text-lg font-semibold text-ink">{value}</div>
     </div>

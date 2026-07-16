@@ -2,15 +2,93 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────────────────
+   HFOS design tokens. Semantic CSS variables drive the whole UI; light and
+   dark are designed intentionally (not auto-inverted). Palette direction:
+   deep navy (trust), teal/emerald (growth), soft blue (system), amber
+   (caution), red (true risk, sparingly), indigo (AI).
+   ───────────────────────────────────────────────────────────────────────── */
 :root {
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --muted: #f1f3f7;
+  --elevated: #eef1f6;
+  --border: #e4e8ef;
+  --border-soft: #eef1f5;
+
+  --text: #0f1e34;
+  --text-soft: #33415c;
+  --text-muted: #6b7891;
+
+  --brand: #16324f;
+  --brand-dark: #0f2439;
+  --brand-light: #e8eef6;
+  --brand-fg: #ffffff;
+
+  --positive: #0f766e;
+  --negative: #b91c1c;
+  --warning: #b45309;
+  --info: #2563eb;
+  --ai: #4f46e5;
+
   color-scheme: light;
 }
 
-body {
-  @apply bg-surface text-ink antialiased;
+:root[data-theme="dark"] {
+  --bg: #0a1120;
+  --card: #121a2b;
+  --muted: #182236;
+  --elevated: #202c44;
+  --border: #273249;
+  --border-soft: #1b2536;
+
+  --text: #e7ecf5;
+  --text-soft: #b7c1d6;
+  --text-muted: #8492ab;
+
+  --brand: #5b8fd6;
+  --brand-dark: #bcd3f2;
+  --brand-light: #172742;
+  --brand-fg: #0a1120;
+
+  --positive: #34d399;
+  --negative: #f87171;
+  --warning: #fbbf24;
+  --info: #60a5fa;
+  --ai: #818cf8;
+
+  color-scheme: dark;
 }
 
-/* Numeric cells and money read better tabular */
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tabular numerals for all financial values (§7.4). */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* Premium skeleton shimmer for loading states (§20.1). */
+@keyframes hfos-shimmer {
+  0% { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--muted) 25%, var(--elevated) 37%, var(--muted) 63%);
+  background-size: 1200px 100%;
+  animation: hfos-shimmer 1.4s ease infinite;
+  border-radius: 0.5rem;
+}
+
+/* Respect reduced-motion preference (§21, §23). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

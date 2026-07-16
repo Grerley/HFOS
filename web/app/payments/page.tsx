@@ -1,7 +1,7 @@
 "use client";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
-import { Button, Card, Field, Input, Select, EmptyState, Spinner } from "@/components/ui";
+import { Button, Card, Field, Input, Select, EmptyState, PageSkeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent, toCents } from "@/lib/format";
 import type { Member, Period } from "@/lib/types";
@@ -34,14 +34,14 @@ const CUR = "ZAR";
 const METHODS = ["debit_order", "eft", "card", "cash", "internal_transfer", "stop_order", "bank_app", "other"];
 
 const STATUS_STYLE: Record<string, { label: string; cls: string; icon: string }> = {
-  not_paid: { label: "Not paid", cls: "bg-slate-100 text-slate-700", icon: "○" },
+  not_paid: { label: "Not paid", cls: "bg-muted text-ink", icon: "○" },
   scheduled: { label: "Scheduled", cls: "bg-cyan-50 text-cyan-700", icon: "◷" },
   partially_paid: { label: "Partial", cls: "bg-amber-50 text-amber-700", icon: "◑" },
   fully_paid: { label: "Paid", cls: "bg-emerald-50 text-emerald-700", icon: "●" },
   overpaid: { label: "Overpaid", cls: "bg-purple-50 text-purple-700", icon: "▲" },
   overdue: { label: "Overdue", cls: "bg-red-50 text-red-700", icon: "!" },
-  cancelled: { label: "Cancelled", cls: "bg-slate-100 text-slate-400 line-through", icon: "—" },
-  not_applicable: { label: "N/A", cls: "bg-slate-100 text-slate-400", icon: "—" },
+  cancelled: { label: "Cancelled", cls: "bg-muted text-ink-muted line-through", icon: "—" },
+  not_applicable: { label: "N/A", cls: "bg-muted text-ink-muted", icon: "—" },
 };
 
 function StatusBadge({ status, overdue }: { status: string; overdue: boolean }) {
@@ -122,7 +122,7 @@ export default function PaymentsPage() {
     });
   }, [data, filter, search]);
 
-  if (loading) return <AppShell><Spinner /></AppShell>;
+  if (loading) return <AppShell><PageSkeleton /></AppShell>;
   const s = data?.summary;
 
   return (
@@ -155,7 +155,7 @@ export default function PaymentsPage() {
           <div className="mb-3 flex flex-wrap items-center gap-2">
             {FILTERS.map((f) => (
               <button key={f} onClick={() => setFilter(f)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition ${filter === f ? "bg-brand text-white" : "border border-slate-200 text-ink-soft hover:bg-slate-50"}`}>
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${filter === f ? "bg-brand text-white" : "border border-line text-ink-soft hover:bg-muted"}`}>
                 {f}
               </button>
             ))}
@@ -166,7 +166,7 @@ export default function PaymentsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 text-left text-xs uppercase text-ink-muted">
+                  <tr className="border-b border-line text-left text-xs uppercase text-ink-muted">
                     <th className="py-2 pr-3">Expense</th>
                     <th className="py-2 pr-3">Category</th>
                     <th className="py-2 pr-3 text-right">Planned</th>
@@ -182,7 +182,7 @@ export default function PaymentsPage() {
                 <tbody>
                   {visible.map((l) => (
                     <Fragment key={l.line_id}>
-                      <tr className="border-b border-slate-50 align-middle">
+                      <tr className="border-b border-line-soft align-middle">
                         <td className="py-2 pr-3 font-medium text-ink">
                           <button onClick={() => toggleExpand(l.line_id)} className="mr-1 text-ink-muted">{expanded === l.line_id ? "▾" : "▸"}</button>
                           {l.item_name}
@@ -208,7 +208,7 @@ export default function PaymentsPage() {
                         </td>
                       </tr>
                       {expanded === l.line_id && (
-                        <tr className="bg-slate-50">
+                        <tr className="bg-muted">
                           <td colSpan={10} className="px-6 py-4">
                             <ExpandedRow line={l} history={history} members={members} accounts={accounts}
                               onChanged={refresh} onAddPayment={() => setModal({ line: l, prefill: l.outstanding_cents })} />
@@ -238,7 +238,7 @@ export default function PaymentsPage() {
 function Tile({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: "positive" | "negative" | "neutral" }) {
   const c = tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : "text-ink";
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+    <div className="rounded-xl border border-line bg-card px-4 py-3">
       <div className="text-xs text-ink-muted">{label}</div>
       <div className={`tabular text-lg font-semibold ${c}`}>{value}</div>
       {hint && <div className="text-xs text-ink-muted">{hint}</div>}
@@ -290,7 +290,7 @@ function ExpandedRow({ line, history, members, accounts, onChanged, onAddPayment
             </tr></thead>
             <tbody className="tabular">
               {history.map((h) => (
-                <tr key={h.id} className={`border-t border-slate-100 ${h.is_reversal ? "text-negative" : ""}`}>
+                <tr key={h.id} className={`border-t border-line-soft ${h.is_reversal ? "text-negative" : ""}`}>
                   <td className="py-1">{h.payment_date}</td>
                   <td>{h.is_reversal ? "−" : ""}{formatMoney(h.amount_cents, CUR)}</td>
                   <td>{h.payment_method}{h.is_reversal ? " (reversal)" : ""}</td>
@@ -368,7 +368,7 @@ function AddPaymentModal({ line, prefill, members, accounts, onClose, onSaved }:
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-xl bg-card p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-sm font-semibold text-ink">Record payment — {line.item_name}</h3>
         <p className="mb-4 text-xs text-ink-muted">
           Planned {formatMoney(line.planned_cents, CUR)} · Outstanding {formatMoney(line.outstanding_cents, CUR)}

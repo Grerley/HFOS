@@ -35,11 +35,13 @@ export default function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-full.png" alt="HFOS" className="mx-auto h-auto w-56" />
+          <span className="inline-block rounded-lg bg-[#ffffff] p-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-full.png" alt="HFOS" className="block h-auto w-52" />
+          </span>
           <p className="mt-2 text-sm text-ink-muted">Create your household</p>
         </div>
-        <form onSubmit={submit} className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <form onSubmit={submit} className="space-y-4 rounded-xl border border-line bg-card p-6 shadow-sm">
           <Field label="Your name">
             <Input value={form.name} onChange={(e) => update("name", e.target.value)} required />
           </Field>
