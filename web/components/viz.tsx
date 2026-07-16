@@ -42,11 +42,18 @@ export function CategoryBars({
   );
 }
 
+type TrendPoint = { label: string; income_cents: number; expenses_cents: number; net_cents: number };
+
 export function TrendChart({
   series,
+  format = (c: number) => String(c),
 }: {
-  series: { label: string; income_cents: number; expenses_cents: number; net_cents: number }[];
+  series: TrendPoint[];
+  format?: (cents: number) => string;
 }) {
+  const [hover, setHover] = React.useState<number | null>(null);
+  const [showTable, setShowTable] = React.useState(false);
+
   if (series.length < 2) {
     return <p className="text-sm text-ink-muted">Add more periods to see trends.</p>;
   }
@@ -59,18 +66,87 @@ export function TrendChart({
   const range = max - min || 1;
   const x = (i: number) => pad + (i * (w - 2 * pad)) / (series.length - 1);
   const y = (v: number) => h - pad - ((v - min) / range) * (h - 2 * pad);
-  const line = (key: "income_cents" | "expenses_cents" | "net_cents") =>
-    series.map((s, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(s[key])}`).join(" ");
+  // Colours are token-driven: each series paints with `currentColor` set by a
+  // Tailwind text-* class that resolves to the theme CSS variable (light/dark aware).
+  const keys: { key: keyof TrendPoint; cls: string; dash?: string; name: string }[] = [
+    { key: "income_cents", cls: "text-positive", name: "Income" },
+    { key: "expenses_cents", cls: "text-negative", name: "Expenses" },
+    { key: "net_cents", cls: "text-brand", dash: "4 3", name: "Net" },
+  ];
+  const line = (key: keyof TrendPoint) =>
+    series.map((s, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(s[key] as number)}`).join(" ");
+
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full">
-      <path d={line("income_cents")} fill="none" stroke="#047857" strokeWidth={2} />
-      <path d={line("expenses_cents")} fill="none" stroke="#b91c1c" strokeWidth={2} />
-      <path d={line("net_cents")} fill="none" stroke="#0e7490" strokeWidth={2} strokeDasharray="4 3" />
-      {series.map((s, i) => (
-        <text key={i} x={x(i)} y={h - 6} textAnchor="middle" className="fill-current text-ink-muted text-[9px]">
-          {s.label.length > 7 ? s.label.slice(0, 7) : s.label}
-        </text>
-      ))}
-    </svg>
+    <figure className="m-0">
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        className="w-full"
+        role="img"
+        aria-label="Trend of income, expenses and net across recent periods"
+        onMouseLeave={() => setHover(null)}
+      >
+        {keys.map((k) => (
+          <path key={k.key as string} d={line(k.key)} fill="none" strokeWidth={2} strokeDasharray={k.dash} className={k.cls} stroke="currentColor" />
+        ))}
+        {/* Hover markers + native tooltip per point (accessible + no dependency). */}
+        {series.map((s, i) => (
+          <g key={i} onMouseEnter={() => setHover(i)}>
+            {hover === i && <line x1={x(i)} y1={pad / 2} x2={x(i)} y2={h - pad} className="text-line" stroke="currentColor" strokeWidth={1} />}
+            {keys.map((k) => (
+              <circle key={k.key as string} cx={x(i)} cy={y(s[k.key] as number)} r={hover === i ? 3.5 : 0} className={k.cls} fill="currentColor" />
+            ))}
+            {/* Invisible wide hit-area for easy hovering. */}
+            <rect x={x(i) - (w - 2 * pad) / series.length / 2} y={0} width={(w - 2 * pad) / series.length} height={h} fill="transparent" />
+            <title>{`${s.label} — Income ${format(s.income_cents)}, Expenses ${format(s.expenses_cents)}, Net ${format(s.net_cents)}`}</title>
+          </g>
+        ))}
+        {series.map((s, i) => (
+          <text key={`t${i}`} x={x(i)} y={h - 6} textAnchor="middle" className="fill-current text-ink-muted text-[9px]">
+            {s.label.length > 7 ? s.label.slice(0, 7) : s.label}
+          </text>
+        ))}
+      </svg>
+
+      {hover !== null && (
+        <div className="mt-2 rounded-lg border border-line-soft bg-muted px-3 py-2 text-xs" role="status">
+          <span className="font-medium text-ink">{series[hover].label}</span>
+          <span className="tabular ml-3 text-positive">In {format(series[hover].income_cents)}</span>
+          <span className="tabular ml-3 text-negative">Out {format(series[hover].expenses_cents)}</span>
+          <span className="tabular ml-3 text-brand-dark">Net {format(series[hover].net_cents)}</span>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setShowTable((v) => !v)}
+        className="mt-2 text-xs font-medium text-ink-muted underline hover:text-ink"
+        aria-expanded={showTable}
+      >
+        {showTable ? "Hide data table" : "View as table"}
+      </button>
+      {showTable && (
+        <figcaption className="sr-only">Underlying trend data</figcaption>
+      )}
+      <table className={`mt-2 w-full text-xs ${showTable ? "" : "sr-only"}`}>
+        <thead>
+          <tr className="text-left text-ink-muted">
+            <th className="py-1 font-medium">Period</th>
+            <th className="py-1 text-right font-medium">Income</th>
+            <th className="py-1 text-right font-medium">Expenses</th>
+            <th className="py-1 text-right font-medium">Net</th>
+          </tr>
+        </thead>
+        <tbody>
+          {series.map((s, i) => (
+            <tr key={i} className="border-t border-line-soft">
+              <td className="py-1 text-ink-soft">{s.label}</td>
+              <td className="tabular py-1 text-right text-positive">{format(s.income_cents)}</td>
+              <td className="tabular py-1 text-right text-negative">{format(s.expenses_cents)}</td>
+              <td className="tabular py-1 text-right text-brand-dark">{format(s.net_cents)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </figure>
   );
 }

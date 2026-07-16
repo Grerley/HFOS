@@ -35,20 +35,28 @@ export function StatCard({
   value,
   hint,
   tone = "neutral",
+  onClick,
 }: {
   label: string;
   value: string;
   hint?: string;
   tone?: "neutral" | "positive" | "negative";
+  onClick?: () => void;
 }) {
   const toneClass =
     tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : "text-ink";
+  const interactive = onClick
+    ? "cursor-pointer text-left transition hover:border-brand hover:shadow-card focus:outline-none focus:ring-2 focus:ring-brand"
+    : "";
+  const Tag: any = onClick ? "button" : "div";
   return (
-    <div className="rounded-xl border border-line bg-card p-5 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</p>
+    <Tag onClick={onClick} className={`w-full rounded-xl border border-line bg-card p-5 shadow-sm ${interactive}`}>
+      <p className="flex items-center justify-between text-xs font-medium uppercase tracking-wide text-ink-muted">
+        {label}{onClick && <span aria-hidden className="text-ink-muted">›</span>}
+      </p>
       <p className={`tabular mt-2 text-2xl font-semibold ${toneClass}`}>{value}</p>
       {hint && <p className="mt-1 text-xs text-ink-muted">{hint}</p>}
-    </div>
+    </Tag>
   );
 }
 
@@ -145,6 +153,39 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
 export function Spinner() {
   return (
     <div className="flex items-center justify-center p-10 text-sm text-ink-muted">Loading…</div>
+  );
+}
+
+// ── Drawer (right slide-over for drill-downs & detail, §6.1) ───────────────────
+export function Drawer({ open, onClose, title, subtitle, children }: {
+  open: boolean; onClose: () => void; title: string; subtitle?: string; children: React.ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-line bg-card shadow-card">
+        <div className="flex items-start justify-between border-b border-line-soft px-5 py-4">
+          <div>
+            <h3 className="text-sm font-semibold text-ink">{title}</h3>
+            {subtitle && <p className="text-xs text-ink-muted">{subtitle}</p>}
+          </div>
+          <button onClick={onClose} aria-label="Close" className="rounded-lg px-2 py-1 text-ink-muted hover:bg-muted">✕</button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/** A single "amount = calculation" row used inside drill-down drawers. */
+export function DrillRow({ label, value, tone, strong }: { label: string; value: string; tone?: "positive" | "negative"; strong?: boolean }) {
+  const c = tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : "text-ink";
+  return (
+    <div className={`flex items-center justify-between py-1.5 ${strong ? "border-t border-line-soft font-semibold" : ""}`}>
+      <span className={`text-sm ${strong ? "text-ink" : "text-ink-soft"}`}>{label}</span>
+      <span className={`tabular text-sm ${strong ? "font-semibold" : ""} ${c}`}>{value}</span>
+    </div>
   );
 }
 
