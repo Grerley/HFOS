@@ -57,8 +57,14 @@ function StatusBadge({ status, overdue }: { status: string; overdue: boolean }) 
 }
 
 const FILTERS = [
-  "All", "Not Paid", "Partially Paid", "Fully Paid", "Overpaid", "Overdue", "Debit Orders", "Manual", "Needs Confirmation",
+  "All", "Not Paid", "Partially Paid", "Fully Paid", "Overpaid", "Overdue", "Due Soon", "Debit Orders", "Manual", "Needs Confirmation",
 ];
+
+function addDaysISO(iso: string, n: number): string {
+  const d = new Date(iso || new Date().toISOString().slice(0, 10));
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
 
 export default function PaymentsPage() {
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -72,6 +78,7 @@ export default function PaymentsPage() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [history, setHistory] = useState<PaymentRec[]>([]);
   const [modal, setModal] = useState<{ line: SettleLine; prefill: number } | null>(null);
+  const [confirmLine, setConfirmLine] = useState<SettleLine | null>(null);
 
   const loadSettlement = useCallback(async (pid: number) => {
     setData(await api.get<Settlement>(`/budget-periods/${pid}/settlement`));
@@ -94,7 +101,12 @@ export default function PaymentsPage() {
     setPeriodId(id); setExpanded(null);
     await loadSettlement(id);
   }
-  async function refresh() { if (periodId) await loadSettlement(periodId); }
+  async function refresh() { if (periodId) await loadSettlement(periodId); if (expanded) setHistory(await api.get(`/budget-lines/${expanded}/payments`)); }
+
+  async function markPaidFull(lineId: number) {
+    try { await api.post(`/budget-lines/${lineId}/mark-paid`, {}); await refresh(); }
+    catch (e: any) { alert(e.message); }
+  }
 
   async function toggleExpand(lineId: number) {
     if (expanded === lineId) { setExpanded(null); return; }
@@ -113,6 +125,7 @@ export default function PaymentsPage() {
         filter === "Fully Paid" ? l.status === "fully_paid" :
         filter === "Overpaid" ? l.status === "overpaid" :
         filter === "Overdue" ? l.is_overdue || l.status === "overdue" :
+        filter === "Due Soon" ? (l.outstanding_cents > 0 && !!l.due_date && !l.is_overdue && !!data && l.due_date >= data.today && l.due_date <= addDaysISO(data.today, 7)) :
         filter === "Debit Orders" ? l.is_debit_order :
         filter === "Manual" ? l.is_manual_payment :
         filter === "Needs Confirmation" ? l.is_debit_order && l.requires_confirmation && l.status !== "fully_paid" :
@@ -162,6 +175,7 @@ export default function PaymentsPage() {
             <Input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} className="ml-auto max-w-[12rem]" />
           </div>
 
+          <div className="hidden md:block">
           <Card>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -203,15 +217,19 @@ export default function PaymentsPage() {
                         <td className="py-2 pr-3 text-ink-muted">{l.responsible_member_name ?? "—"}</td>
                         <td className="py-2 text-right">
                           {l.outstanding_cents > 0 ? (
-                            <Button variant="ghost" onClick={() => setModal({ line: l, prefill: l.outstanding_cents })}>Pay</Button>
-                          ) : <span className="text-xs text-emerald-600">settled</span>}
+                            <div className="flex items-center justify-end gap-1">
+                              {l.is_debit_order && <Button variant="ghost" onClick={() => setConfirmLine(l)}>Confirm</Button>}
+                              <Button variant="ghost" onClick={() => setModal({ line: l, prefill: l.outstanding_cents })}>Pay</Button>
+                            </div>
+                          ) : <span className="text-xs text-positive">settled</span>}
                         </td>
                       </tr>
                       {expanded === l.line_id && (
                         <tr className="bg-muted">
                           <td colSpan={10} className="px-6 py-4">
                             <ExpandedRow line={l} history={history} members={members} accounts={accounts}
-                              onChanged={refresh} onAddPayment={() => setModal({ line: l, prefill: l.outstanding_cents })} />
+                              onChanged={refresh} onAddPayment={() => setModal({ line: l, prefill: l.outstanding_cents })}
+                              onMarkFull={() => markPaidFull(l.line_id)} onConfirm={() => setConfirmLine(l)} />
                           </td>
                         </tr>
                       )}
@@ -224,12 +242,29 @@ export default function PaymentsPage() {
               </table>
             </div>
           </Card>
+          </div>
+
+          {/* Mobile: card-based payment view (AC-005) */}
+          <div className="space-y-3 md:hidden">
+            {visible.map((l) => (
+              <PaymentCard key={l.line_id} line={l} expanded={expanded === l.line_id}
+                onToggle={() => toggleExpand(l.line_id)} onPay={() => setModal({ line: l, prefill: l.outstanding_cents })}
+                onConfirm={() => setConfirmLine(l)} onMarkFull={() => markPaidFull(l.line_id)}
+                history={history} members={members} accounts={accounts} onChanged={refresh}
+                onAddPayment={() => setModal({ line: l, prefill: l.outstanding_cents })} />
+            ))}
+            {!visible.length && <EmptyState title="Nothing here" hint={`No expenses match “${filter}”.`} />}
+          </div>
         </>
       )}
 
       {modal && (
         <AddPaymentModal line={modal.line} prefill={modal.prefill} members={members} accounts={accounts}
-          onClose={() => setModal(null)} onSaved={async () => { setModal(null); await refresh(); if (expanded) setHistory(await api.get(`/budget-lines/${expanded}/payments`)); }} />
+          onClose={() => setModal(null)} onSaved={async () => { setModal(null); await refresh(); }} />
+      )}
+      {confirmLine && (
+        <ConfirmDebitModal line={confirmLine} onClose={() => setConfirmLine(null)}
+          onSaved={async () => { setConfirmLine(null); await refresh(); }} />
       )}
     </AppShell>
   );
@@ -246,9 +281,9 @@ function Tile({ label, value, hint, tone }: { label: string; value: string; hint
   );
 }
 
-function ExpandedRow({ line, history, members, accounts, onChanged, onAddPayment }: {
+function ExpandedRow({ line, history, members, accounts, onChanged, onAddPayment, onMarkFull, onConfirm }: {
   line: SettleLine; history: PaymentRec[]; members: Member[]; accounts: Account[];
-  onChanged: () => Promise<void>; onAddPayment: () => void;
+  onChanged: () => Promise<void>; onAddPayment: () => void; onMarkFull?: () => void; onConfirm?: () => void;
 }) {
   const [comment, setComment] = useState("");
   const [cfg, setCfg] = useState({
@@ -279,9 +314,11 @@ function ExpandedRow({ line, history, members, accounts, onChanged, onAddPayment
   return (
     <div className="grid gap-6 md:grid-cols-3">
       <div className="md:col-span-2">
-        <div className="mb-2 flex items-center gap-2">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
           <h4 className="text-xs font-semibold uppercase text-ink-muted">Payment history</h4>
           <Button variant="ghost" onClick={onAddPayment}>Add payment</Button>
+          {line.outstanding_cents > 0 && onMarkFull && <Button variant="ghost" onClick={onMarkFull}>Mark paid in full</Button>}
+          {line.is_debit_order && line.outstanding_cents > 0 && onConfirm && <Button variant="ghost" onClick={onConfirm}>Confirm debit order</Button>}
         </div>
         {history.length ? (
           <table className="w-full text-xs">
@@ -401,6 +438,108 @@ function AddPaymentModal({ line, prefill, members, accounts, onClose, onSaved }:
           <div className="col-span-2 flex justify-end gap-2">
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
             <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save payment"}</Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function PaymentCard({ line, expanded, onToggle, onPay, onConfirm, onMarkFull, history, members, accounts, onChanged, onAddPayment }: {
+  line: SettleLine; expanded: boolean; onToggle: () => void; onPay: () => void; onConfirm: () => void; onMarkFull: () => void;
+  history: PaymentRec[]; members: Member[]; accounts: Account[]; onChanged: () => Promise<void>; onAddPayment: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-line bg-card p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-medium text-ink">{line.item_name}</div>
+          <div className="text-xs text-ink-muted">
+            {line.category_name}{line.due_date ? ` · due ${line.due_date}` : ""}{line.is_debit_order ? " · debit order" : line.is_manual_payment ? " · manual" : ""}
+          </div>
+        </div>
+        <StatusBadge status={line.status} overdue={line.is_overdue} />
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <div><div className="text-[10px] uppercase text-ink-muted">Planned</div><div className="tabular text-sm font-semibold">{formatMoney(line.planned_cents, CUR)}</div></div>
+        <div><div className="text-[10px] uppercase text-ink-muted">Paid</div><div className="tabular text-sm font-semibold text-positive">{formatMoney(line.paid_cents, CUR)}</div></div>
+        <div><div className="text-[10px] uppercase text-ink-muted">Outstanding</div><div className={`tabular text-sm font-semibold ${line.outstanding_cents > 0 ? "text-negative" : "text-ink-muted"}`}>{formatMoney(line.outstanding_cents, CUR)}</div></div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {line.outstanding_cents > 0 && <Button onClick={onPay}>Pay</Button>}
+        {line.outstanding_cents > 0 && <Button variant="ghost" onClick={onMarkFull}>Mark full</Button>}
+        {line.is_debit_order && line.outstanding_cents > 0 && <Button variant="ghost" onClick={onConfirm}>Confirm</Button>}
+        <Button variant="ghost" onClick={onToggle} className="ml-auto">{expanded ? "Hide" : "Details"}</Button>
+      </div>
+      {expanded && (
+        <div className="mt-3 border-t border-line-soft pt-3">
+          <ExpandedRow line={line} history={history} members={members} accounts={accounts}
+            onChanged={onChanged} onAddPayment={onAddPayment} onMarkFull={onMarkFull} onConfirm={onConfirm} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Debit-order confirmation flow (FR-022, UX-007): did it go off, and for how much?
+function ConfirmDebitModal({ line, onClose, onSaved }: { line: SettleLine; onClose: () => void; onSaved: () => void }) {
+  const [outcome, setOutcome] = useState<"confirmed" | "different" | "failed">("confirmed");
+  const [amount, setAmount] = useState<number | string>(line.outstanding_cents / 100);
+  const [date, setDate] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      if (outcome === "failed") {
+        if (!notes.trim()) { alert("Please add a note explaining what happened."); setBusy(false); return; }
+        await api.post(`/budget-lines/${line.line_id}/comments`, { comment_text: `Debit order not successful: ${notes}`, comment_type: "dispute" });
+      } else {
+        if (outcome === "different" && !notes.trim()) { alert("A note is required when the debited amount differs."); setBusy(false); return; }
+        const amt = outcome === "confirmed" ? line.outstanding_cents : toCents(String(amount));
+        await api.post(`/budget-lines/${line.line_id}/payments`, {
+          amount_cents: amt, payment_method: "debit_order", payment_date: date || undefined,
+          notes: notes || (outcome === "confirmed" ? "Debit order confirmed" : null),
+        });
+      }
+      onSaved();
+    } catch (err: any) { alert(err.message); setBusy(false); }
+  }
+
+  const opts: [typeof outcome, string][] = [
+    ["confirmed", `Yes — went off as expected (${formatMoney(line.outstanding_cents, CUR)})`],
+    ["different", "Yes — but a different amount"],
+    ["failed", "No — failed / not debited"],
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl bg-card p-6 shadow-card" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-sm font-semibold text-ink">Confirm debit order — {line.item_name}</h3>
+        <p className="mb-4 text-xs text-ink-muted">Did this debit order go off?</p>
+        <form onSubmit={submit} className="space-y-3">
+          <div className="space-y-2">
+            {opts.map(([val, label]) => (
+              <label key={val} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${outcome === val ? "border-brand bg-brand-light text-brand-dark" : "border-line text-ink-soft"}`}>
+                <input type="radio" name="outcome" checked={outcome === val} onChange={() => setOutcome(val)} />
+                {label}
+              </label>
+            ))}
+          </div>
+          {outcome === "different" && (
+            <Field label="Amount debited"><Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+          )}
+          {outcome !== "failed" && (
+            <Field label="Date debited"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+          )}
+          <Field label={outcome === "failed" || outcome === "different" ? "Note (required)" : "Note"}>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={outcome === "failed" ? "What happened?" : outcome === "different" ? "Why did the amount differ?" : "Optional"} />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</Button>
           </div>
         </form>
       </div>
