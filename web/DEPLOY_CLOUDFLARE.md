@@ -21,47 +21,32 @@ set secrets, connect the repo. Then I manage the running service via the Cloudfl
 
 ## One-time setup (your steps)
 
-Prereq: a free Cloudflare account and the repo on GitHub (done: `Grerley/HFOS`).
+Deployment is fully automated by **GitHub Actions** (`.github/workflows/deploy.yml`): every
+push to `main` runs tests, builds, applies D1 migrations, deploys the Worker, and syncs the
+runtime secret. The D1 database `hfos-db` and its schema are **already provisioned via MCP**.
 
-### 1. Create the D1 database
-```bash
-npm i -g wrangler
-wrangler login
-wrangler d1 create hfos-db
-```
-Copy the printed `database_id` — paste it into `web/wrangler.toml` under the D1 binding
-(I'll leave a clearly-marked placeholder there).
+The only thing that can't be automated is seeding the secret *values*, since only a repo admin
+can write GitHub Actions secrets. Two one-time steps:
 
-### 2. Set secrets
-Generate and store the app secrets (never commit them):
-```bash
-# JWT signing secret
-wrangler secret put HFOS_SECRET_KEY
-# Field-encryption key (optional in early release)
-wrangler secret put HFOS_ENCRYPTION_KEY
-```
-For production via Workers Builds, set the same as **encrypted environment variables** in the
-Cloudflare dashboard (Workers & Pages → your Worker → Settings → Variables).
+### 1. Create a Cloudflare API token
+Cloudflare dashboard → **My Profile → API Tokens → Create Token → "Edit Cloudflare Workers"**
+template. Add **D1 → Edit** permission to it as well. Copy the token.
 
-### 3. Apply the database schema
-```bash
-cd web
-wrangler d1 migrations apply hfos-db --remote     # production D1
-# local dev uses:  wrangler d1 migrations apply hfos-db --local
-```
+### 2. Add GitHub repository secrets
+GitHub → repo **Settings → Secrets and variables → Actions → New repository secret**:
 
-### 4. Connect the repo for auto-deploy (Workers Builds)
-Cloudflare dashboard → **Workers & Pages → Create → Workers → Connect to Git** → pick
-`Grerley/HFOS`, branch `path-b-cloudflare` (or `main` after we merge):
-- **Root directory:** `web`
-- **Build command:** `npx opennextjs-cloudflare build`
-- **Deploy command:** `npx wrangler d1 migrations apply hfos-db --remote && npx wrangler deploy`
-- Every push then builds + migrates + deploys automatically.
+| Secret name | Value |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | the token from step 1 |
+| `HFOS_SECRET_KEY` | any long random string (a generated one is provided in chat) |
+| `CLOUDFLARE_ACCOUNT_ID` | *optional* — only if the token isn't account-scoped |
 
-> The D1 database and its schema are **already provisioned** (done via MCP), so the very
-> first deploy works even before any migration step runs.
+Then push to `main` (or run the workflow manually via **Actions → Deploy → Run workflow**).
+That's it — the workflow deploys and gives you a `*.workers.dev` URL. From then on, neither of
+us touches secrets: the workflow re-syncs `HFOS_SECRET_KEY` to the Worker on every deploy, and
+I manage the running service (D1, logs, rollbacks) via the Cloudflare MCP.
 
-### 5. (Optional) custom domain
+### (Optional) custom domain
 Add `app.yourdomain.com` to the Worker in the dashboard; Cloudflare manages TLS.
 
 ---
