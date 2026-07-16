@@ -1,0 +1,17 @@
+{
+  "name": "hfos-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.28.1",
+    "drizzle-orm": "^0.36.4",
+    "typescript": "5.6.3",
+    "vitest": "2.1.8"
+  }
+}
