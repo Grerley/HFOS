@@ -4,6 +4,7 @@ import AppShell, { PageHeader } from "@/components/AppShell";
 import { Button, Card, Input, Select, Badge, EmptyState, PageSkeleton, Modal, Field } from "@/components/ui";
 import NewMonthWizard from "@/components/NewMonthWizard";
 import { api } from "@/lib/api";
+import { PAYMENT_TYPE_OPTIONS } from "@/lib/paymentTypes";
 import { formatMoney, formatPercent, fromCents, toCents } from "@/lib/format";
 import type { Category, Line, Member, Period, PeriodSummary } from "@/lib/types";
 
@@ -100,7 +101,7 @@ export default function PlannerPage() {
       {
         id: -Date.now(), period_id: periodId!, category_id: child?.id ?? activeSection ?? 0,
         item_name: "", planned_amount_cents: 0, actual_amount_cents: 0, recurrence: "monthly",
-        payment_status: "planned", is_recurring: true, priority: 3, needs_review: false, _new: true,
+        payment_status: "planned", payment_type: "manual", is_recurring: true, priority: 3, needs_review: false, _new: true,
       } as EditRow,
     ]);
   }
@@ -118,15 +119,15 @@ export default function PlannerPage() {
       const creates = rows.filter((r) => r._new && r.item_name).map((r) => ({
         category_id: r.category_id, item_name: r.item_name, owner_member_id: r.owner_member_id,
         planned_amount_cents: r.planned_amount_cents, actual_amount_cents: r.actual_amount_cents,
-        due_day: r.due_day, payment_status: r.payment_status, is_recurring: r.is_recurring,
-        priority: r.priority,
+        due_day: r.due_day, payment_status: r.payment_status, payment_type: r.payment_type ?? "manual",
+        is_recurring: r.is_recurring, priority: r.priority,
       }));
       const updates: Record<number, any> = {};
       rows.filter((r) => r._dirty && !r._new).forEach((r) => {
         updates[r.id] = {
           category_id: r.category_id, item_name: r.item_name, owner_member_id: r.owner_member_id,
           planned_amount_cents: r.planned_amount_cents, actual_amount_cents: r.actual_amount_cents,
-          payment_status: r.payment_status, due_day: r.due_day ?? null,
+          payment_status: r.payment_status, due_day: r.due_day ?? null, payment_type: r.payment_type ?? "manual",
         };
       });
       await api.post(`/budget-periods/${periodId}/lines/batch`, { creates, updates, deletes });
@@ -331,6 +332,7 @@ export default function PlannerPage() {
                     <th className="py-2 pr-3">Category</th>
                     <th className="py-2 pr-3">Owner</th>
                     <th className="py-2 pr-3">Due day</th>
+                    <th className="py-2 pr-3">Type</th>
                     <th className="py-2 pr-3 text-right">Planned</th>
                     <th className="py-2 pr-3 text-right">Actual</th>
                     <th className="py-2 pr-3">Status</th>
@@ -381,6 +383,17 @@ export default function PlannerPage() {
                           />
                         )}
                       </td>
+                      <td className="py-1.5 pr-3">
+                        {locked ? (PAYMENT_TYPE_OPTIONS.find((o) => o.value === (r.payment_type ?? "manual"))?.label ?? "—") : (
+                          <Select
+                            value={r.payment_type ?? "manual"}
+                            onChange={(e) => editRow(r.id, { payment_type: e.target.value })}
+                            title="How this obligation is settled (feeds Payments: debit orders need confirmation, manual payments are yours to make)"
+                          >
+                            {PAYMENT_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </Select>
+                        )}
+                      </td>
                       <td className="py-1.5 pr-3 text-right">
                         {locked ? formatMoney(r.planned_amount_cents, currency) : (
                           <Input type="number" step="0.01" defaultValue={fromCents(r.planned_amount_cents)}
@@ -409,13 +422,13 @@ export default function PlannerPage() {
                   ))}
                   {visibleRows.length > 0 && (
                     <tr className="border-t-2 border-line font-medium">
-                      <td className="py-2 pr-3 text-ink-muted" colSpan={4}>{activeName} subtotal (planned)</td>
+                      <td className="py-2 pr-3 text-ink-muted" colSpan={5}>{activeName} subtotal (planned)</td>
                       <td className="tabular py-2 pr-3 text-right">{formatMoney(plannedFor(activeSection), currency)}</td>
                       <td colSpan={3}></td>
                     </tr>
                   )}
                   {!visibleRows.length && (
-                    <tr><td colSpan={8} className="py-6 text-center text-ink-muted">
+                    <tr><td colSpan={9} className="py-6 text-center text-ink-muted">
                       No lines in {activeName}. {!locked && "Use “Add line” to create one here."}
                     </td></tr>
                   )}

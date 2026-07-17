@@ -3,13 +3,14 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
 import { Button, Card, Field, Input, Select, EmptyState, PageSkeleton } from "@/components/ui";
 import PaymentCalendar from "@/components/PaymentCalendar";
+import { PAYMENT_TYPE_OPTIONS, PAYMENT_TYPE_LABEL } from "@/lib/paymentTypes";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent, toCents } from "@/lib/format";
 import type { Member, Period } from "@/lib/types";
 
 interface SettleLine {
   line_id: number; item_name: string; category_name: string | null; section_name: string;
-  due_date: string | null; priority: number; is_debit_order: boolean; is_manual_payment: boolean;
+  due_date: string | null; priority: number; payment_type?: string; is_debit_order: boolean; is_manual_payment: boolean;
   requires_confirmation: boolean; responsible_member_id: number | null; responsible_member_name: string | null;
   payment_count: number; comment_count: number;
   planned_cents: number; paid_cents: number; outstanding_cents: number; overpaid_cents: number;
@@ -58,7 +59,7 @@ function StatusBadge({ status, overdue }: { status: string; overdue: boolean }) 
 }
 
 const FILTERS = [
-  "All", "Not Paid", "Partially Paid", "Fully Paid", "Overpaid", "Overdue", "Due Soon", "Debit Orders", "Manual", "Needs Confirmation",
+  "All", "Not Paid", "Partially Paid", "Fully Paid", "Overpaid", "Overdue", "Due Soon", "Automatic", "Manual", "Needs Confirmation",
 ];
 
 function addDaysISO(iso: string, n: number): string {
@@ -148,7 +149,7 @@ export default function PaymentsPage() {
         filter === "Overpaid" ? l.status === "overpaid" :
         filter === "Overdue" ? l.is_overdue || l.status === "overdue" :
         filter === "Due Soon" ? (l.outstanding_cents > 0 && !!l.due_date && !l.is_overdue && !!data && l.due_date >= data.today && l.due_date <= addDaysISO(data.today, 7)) :
-        filter === "Debit Orders" ? l.is_debit_order :
+        filter === "Automatic" ? l.is_debit_order :
         filter === "Manual" ? l.is_manual_payment :
         filter === "Needs Confirmation" ? l.is_debit_order && l.requires_confirmation && l.status !== "fully_paid" :
         true;
@@ -288,7 +289,7 @@ export default function PaymentsPage() {
                         <td className="py-2 pr-3"><StatusBadge status={l.status} overdue={l.is_overdue} /></td>
                         <td className="py-2 pr-3 text-ink-muted">{l.due_date ?? "—"}</td>
                         <td className="py-2 pr-3 text-xs text-ink-muted">
-                          {l.is_debit_order ? "Debit order" : l.is_manual_payment ? "Manual" : "—"}
+                          {PAYMENT_TYPE_LABEL[l.payment_type ?? ""] ?? (l.is_debit_order ? "Debit order" : l.is_manual_payment ? "Manual payment" : "—")}
                         </td>
                         <td className="py-2 pr-3 text-ink-muted">{l.responsible_member_name ?? "—"}</td>
                         <td className="py-2 text-right">
@@ -366,7 +367,7 @@ function ExpandedRow({ line, history, members, accounts, onChanged, onAddPayment
   const [comment, setComment] = useState("");
   const [cfg, setCfg] = useState({
     due_date: line.due_date ?? "", responsible_member_id: line.responsible_member_id ?? "",
-    is_debit_order: line.is_debit_order, is_manual_payment: line.is_manual_payment, manual_status: "",
+    payment_type: line.payment_type ?? "manual", manual_status: "",
   });
 
   async function reverse(id: number) {
@@ -378,7 +379,7 @@ function ExpandedRow({ line, history, members, accounts, onChanged, onAddPayment
     await api.patch(`/budget-lines/${line.line_id}/payment-config`, {
       due_date: cfg.due_date || null,
       responsible_member_id: cfg.responsible_member_id ? Number(cfg.responsible_member_id) : null,
-      is_debit_order: cfg.is_debit_order, is_manual_payment: cfg.is_manual_payment,
+      payment_type: cfg.payment_type,
       ...(cfg.manual_status ? { manual_status: cfg.manual_status } : {}),
     });
     await onChanged();
@@ -396,7 +397,7 @@ function ExpandedRow({ line, history, members, accounts, onChanged, onAddPayment
           <h4 className="text-xs font-semibold uppercase text-ink-muted">Payment history</h4>
           <Button variant="ghost" onClick={onAddPayment}>Add payment</Button>
           {line.outstanding_cents > 0 && onMarkFull && <Button variant="ghost" onClick={onMarkFull}>Mark paid in full</Button>}
-          {line.is_debit_order && line.outstanding_cents > 0 && onConfirm && <Button variant="ghost" onClick={onConfirm}>Confirm debit order</Button>}
+          {line.is_debit_order && line.outstanding_cents > 0 && onConfirm && <Button variant="ghost" onClick={onConfirm}>Confirm {PAYMENT_TYPE_LABEL[line.payment_type ?? ""]?.toLowerCase() ?? "payment"}</Button>}
         </div>
         {history.length ? (
           <table className="w-full text-xs">
@@ -433,12 +434,11 @@ function ExpandedRow({ line, history, members, accounts, onChanged, onAddPayment
               {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </Select>
           </Field>
-          <label className="flex items-center gap-2 text-xs text-ink-soft">
-            <input type="checkbox" checked={cfg.is_debit_order} onChange={(e) => setCfg({ ...cfg, is_debit_order: e.target.checked, is_manual_payment: e.target.checked ? false : cfg.is_manual_payment })} /> Debit order
-          </label>
-          <label className="flex items-center gap-2 text-xs text-ink-soft">
-            <input type="checkbox" checked={cfg.is_manual_payment} onChange={(e) => setCfg({ ...cfg, is_manual_payment: e.target.checked, is_debit_order: e.target.checked ? false : cfg.is_debit_order })} /> Manual payment
-          </label>
+          <Field label="Payment type">
+            <Select value={cfg.payment_type} onChange={(e) => setCfg({ ...cfg, payment_type: e.target.value })}>
+              {PAYMENT_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </Select>
+          </Field>
           <Field label="Override status">
             <Select value={cfg.manual_status} onChange={(e) => setCfg({ ...cfg, manual_status: e.target.value })}>
               <option value="">Auto (derive)</option>
@@ -533,7 +533,7 @@ function PaymentCard({ line, expanded, onToggle, onPay, onConfirm, onMarkFull, h
         <div className="min-w-0">
           <div className="font-medium text-ink">{line.item_name}</div>
           <div className="text-xs text-ink-muted">
-            {line.category_name}{line.due_date ? ` · due ${line.due_date}` : ""}{line.is_debit_order ? " · debit order" : line.is_manual_payment ? " · manual" : ""}
+            {line.category_name}{line.due_date ? ` · due ${line.due_date}` : ""}{line.payment_type ? ` · ${PAYMENT_TYPE_LABEL[line.payment_type] ?? line.payment_type}` : ""}
           </div>
         </div>
         <StatusBadge status={line.status} overdue={line.is_overdue} />
@@ -561,6 +561,7 @@ function PaymentCard({ line, expanded, onToggle, onPay, onConfirm, onMarkFull, h
 
 // Debit-order confirmation flow (FR-022, UX-007): did it go off, and for how much?
 function ConfirmDebitModal({ line, onClose, onSaved }: { line: SettleLine; onClose: () => void; onSaved: () => void }) {
+  const typeLabel = PAYMENT_TYPE_LABEL[line.payment_type ?? ""] ?? "Debit order";
   const [outcome, setOutcome] = useState<"confirmed" | "different" | "failed">("confirmed");
   const [amount, setAmount] = useState<number | string>(line.outstanding_cents / 100);
   const [date, setDate] = useState("");
@@ -573,13 +574,13 @@ function ConfirmDebitModal({ line, onClose, onSaved }: { line: SettleLine; onClo
     try {
       if (outcome === "failed") {
         if (!notes.trim()) { alert("Please add a note explaining what happened."); setBusy(false); return; }
-        await api.post(`/budget-lines/${line.line_id}/comments`, { comment_text: `Debit order not successful: ${notes}`, comment_type: "dispute" });
+        await api.post(`/budget-lines/${line.line_id}/comments`, { comment_text: `${typeLabel} not successful: ${notes}`, comment_type: "dispute" });
       } else {
-        if (outcome === "different" && !notes.trim()) { alert("A note is required when the debited amount differs."); setBusy(false); return; }
+        if (outcome === "different" && !notes.trim()) { alert("A note is required when the amount differs."); setBusy(false); return; }
         const amt = outcome === "confirmed" ? line.outstanding_cents : toCents(String(amount));
         await api.post(`/budget-lines/${line.line_id}/payments`, {
-          amount_cents: amt, payment_method: "debit_order", payment_date: date || undefined,
-          notes: notes || (outcome === "confirmed" ? "Debit order confirmed" : null),
+          amount_cents: amt, payment_method: line.payment_type ?? "debit_order", payment_date: date || undefined,
+          notes: notes || (outcome === "confirmed" ? `${typeLabel} confirmed` : null),
         });
       }
       onSaved();
@@ -595,8 +596,8 @@ function ConfirmDebitModal({ line, onClose, onSaved }: { line: SettleLine; onClo
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl bg-card p-6 shadow-card" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-sm font-semibold text-ink">Confirm debit order — {line.item_name}</h3>
-        <p className="mb-4 text-xs text-ink-muted">Did this debit order go off?</p>
+        <h3 className="text-sm font-semibold text-ink">Confirm {typeLabel.toLowerCase()} — {line.item_name}</h3>
+        <p className="mb-4 text-xs text-ink-muted">Did this {typeLabel.toLowerCase()} go off?</p>
         <form onSubmit={submit} className="space-y-3">
           <div className="space-y-2">
             {opts.map(([val, label]) => (

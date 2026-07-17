@@ -63,6 +63,7 @@ export interface Line {
   due_note?: string | null;
   recurrence: string;
   payment_status: string;
+  payment_type?: string;
   is_recurring: boolean;
   priority: number;
   needs_review: boolean;

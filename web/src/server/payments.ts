@@ -94,6 +94,7 @@ export async function periodSettlement(db: DB, householdId: number, periodId: nu
       section_name: sec?.name ?? "Other",
       due_date: l.due_date,
       priority: l.priority,
+      payment_type: l.payment_type,
       is_debit_order: l.is_debit_order,
       is_manual_payment: l.is_manual_payment,
       requires_confirmation: l.requires_confirmation,

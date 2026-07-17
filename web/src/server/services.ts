@@ -14,7 +14,7 @@ import {
 } from "../db/schema";
 import { contentHash } from "../lib/hash";
 import type { LineCalc } from "../lib/calc";
-import { EDITABLE_STATUSES, OUTFLOW_TYPES, Role } from "../lib/enums";
+import { derivePaymentFlags, EDITABLE_STATUSES, OUTFLOW_TYPES, Role } from "../lib/enums";
 import { DEFAULT_TAXONOMY } from "./taxonomy";
 import { HttpError } from "./context";
 
@@ -197,6 +197,9 @@ export async function duplicatePeriod(
         due_day: line.due_day,
         // Re-derive the due date for the NEW period's month from the recurring day.
         due_date: deriveDueDate(np, line.due_day),
+        // Carry the settlement configuration forward.
+        payment_type: line.payment_type,
+        ...derivePaymentFlags(line.payment_type),
         due_note: line.due_note,
         recurrence: line.recurrence,
         payment_status: "planned",
@@ -240,6 +243,7 @@ interface LineInput {
   actual_amount_cents?: number;
   due_day?: number | null;
   payment_status?: string;
+  payment_type?: string | null;
   is_recurring?: boolean;
   priority?: number;
 }
@@ -347,6 +351,8 @@ export async function applyBatch(
       // Derive the concrete due date so Payments picks it up immediately.
       due_date: deriveDueDate(period, c.due_day),
       payment_status: c.payment_status ?? "planned",
+      payment_type: c.payment_type ?? "manual",
+      ...derivePaymentFlags(c.payment_type),
       is_recurring: c.is_recurring ?? true,
       priority: c.priority ?? 3,
     });
@@ -356,9 +362,10 @@ export async function applyBatch(
     const lineId = Number(id);
     const existing = await db.query.budgetLines.findFirst({ where: eq(budgetLines.id, lineId) });
     if (!existing || existing.period_id !== period.id) throw new HttpError(404, `Line ${id} not in period`);
-    // When the due day changes, re-derive the due date to keep Payments in sync.
+    // When the due day / payment type changes, re-derive the linked fields so Payments stays in sync.
     const set: Record<string, unknown> = { ...patch };
     if ("due_day" in patch) set.due_date = deriveDueDate(period, patch.due_day);
+    if ("payment_type" in patch) Object.assign(set, derivePaymentFlags(patch.payment_type));
     await db.update(budgetLines).set(set).where(eq(budgetLines.id, lineId));
     updated++;
   }

@@ -23,7 +23,7 @@ import {
 import * as calc from "../lib/calc";
 import { createAccessToken } from "../lib/auth";
 import { hashPassword, verifyPassword } from "../lib/hash";
-import { LOCKED_STATUSES, PeriodStatus } from "../lib/enums";
+import { derivePaymentFlags, LOCKED_STATUSES, PeriodStatus } from "../lib/enums";
 import {
   Ctx,
   HttpError,
@@ -290,7 +290,8 @@ route("POST", "/budget-periods/:id/lines", async (req, params) => {
     period_id: period.id, household_id: ctx.householdId, category_id: p.category_id, item_name: p.item_name,
     owner_member_id: p.owner_member_id ?? null, planned_amount_cents: p.planned_amount_cents ?? 0, actual_amount_cents: p.actual_amount_cents ?? 0,
     due_day: p.due_day ?? null, due_date: p.due_date ?? deriveDueDate(period, p.due_day),
-    payment_status: p.payment_status ?? "planned", is_recurring: p.is_recurring ?? true, priority: p.priority ?? 3, notes: p.notes ?? null,
+    payment_status: p.payment_status ?? "planned", payment_type: p.payment_type ?? "manual", ...derivePaymentFlags(p.payment_type),
+    is_recurring: p.is_recurring ?? true, priority: p.priority ?? 3, notes: p.notes ?? null,
   }).returning();
   return json(line, 201);
 });
@@ -575,6 +576,8 @@ route("PATCH", "/budget-lines/:id/payment-config", async (req, params) => {
   const allowed: any = {};
   for (const k of ["due_date", "responsible_member_id", "source_account_id", "is_debit_order", "is_manual_payment", "requires_confirmation", "manual_status", "priority"])
     if (k in p) allowed[k] = p[k];
+  // payment_type is the source of truth — derive the settlement booleans from it.
+  if ("payment_type" in p) { allowed.payment_type = p.payment_type; Object.assign(allowed, derivePaymentFlags(p.payment_type)); }
   await ctx.db.update(budgetLines).set(allowed).where(eq(budgetLines.id, line.id));
   await recordAudit(ctx.db, { action: "payment.config_changed", entity_type: "budget_line", entity_id: line.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: allowed });
   return json((await ctx.db.select().from(budgetLines).where(eq(budgetLines.id, line.id))).at(0));
