@@ -122,7 +122,7 @@ export default function PlannerPage() {
         updates[r.id] = {
           category_id: r.category_id, item_name: r.item_name, owner_member_id: r.owner_member_id,
           planned_amount_cents: r.planned_amount_cents, actual_amount_cents: r.actual_amount_cents,
-          payment_status: r.payment_status,
+          payment_status: r.payment_status, due_day: r.due_day ?? null,
         };
       });
       await api.post(`/budget-periods/${periodId}/lines/batch`, { creates, updates, deletes });
@@ -265,6 +265,7 @@ export default function PlannerPage() {
                     <th className="py-2 pr-3">Item</th>
                     <th className="py-2 pr-3">Category</th>
                     <th className="py-2 pr-3">Owner</th>
+                    <th className="py-2 pr-3">Due day</th>
                     <th className="py-2 pr-3 text-right">Planned</th>
                     <th className="py-2 pr-3 text-right">Actual</th>
                     <th className="py-2 pr-3">Status</th>
@@ -301,6 +302,20 @@ export default function PlannerPage() {
                           </Select>
                         )}
                       </td>
+                      <td className="py-1.5 pr-3">
+                        {locked ? (r.due_day ? `Day ${r.due_day}` : "—") : (
+                          <Input
+                            type="number" min={1} max={31} placeholder="—"
+                            defaultValue={r.due_day ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value ? Math.max(1, Math.min(31, Number(e.target.value))) : null;
+                              editRow(r.id, { due_day: v });
+                            }}
+                            className="w-16 text-center tabular"
+                            title="Day of the month this payment is due (feeds Payments & the calendar)"
+                          />
+                        )}
+                      </td>
                       <td className="py-1.5 pr-3 text-right">
                         {locked ? formatMoney(r.planned_amount_cents, currency) : (
                           <Input type="number" step="0.01" defaultValue={fromCents(r.planned_amount_cents)}
@@ -329,13 +344,13 @@ export default function PlannerPage() {
                   ))}
                   {visibleRows.length > 0 && (
                     <tr className="border-t-2 border-line font-medium">
-                      <td className="py-2 pr-3 text-ink-muted" colSpan={3}>{activeName} subtotal (planned)</td>
+                      <td className="py-2 pr-3 text-ink-muted" colSpan={4}>{activeName} subtotal (planned)</td>
                       <td className="tabular py-2 pr-3 text-right">{formatMoney(plannedFor(activeSection), currency)}</td>
                       <td colSpan={3}></td>
                     </tr>
                   )}
                   {!visibleRows.length && (
-                    <tr><td colSpan={7} className="py-6 text-center text-ink-muted">
+                    <tr><td colSpan={8} className="py-6 text-center text-ink-muted">
                       No lines in {activeName}. {!locked && "Use “Add line” to create one here."}
                     </td></tr>
                   )}

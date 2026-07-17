@@ -195,6 +195,8 @@ export async function duplicatePeriod(
         planned_amount_cents: scaleFor(line.category_id, line.planned_amount_cents),
         actual_amount_cents: 0,
         due_day: line.due_day,
+        // Re-derive the due date for the NEW period's month from the recurring day.
+        due_date: deriveDueDate(np, line.due_day),
         due_note: line.due_note,
         recurrence: line.recurrence,
         payment_status: "planned",
@@ -242,6 +244,35 @@ interface LineInput {
   priority?: number;
 }
 
+/**
+ * Resolve a recurring "day of month" to the concrete ISO due date that falls
+ * inside a period's window. `due_day` is the durable, carry-forward value;
+ * `due_date` is derived per period so the settlement/Payments engine (which
+ * keys off due_date) always reflects it. Handles month-aligned and cross-month
+ * cycles, and clamps to the month length (e.g. day 31 in February → 28/29).
+ */
+export function deriveDueDate(
+  period: { start_date: string; end_date: string },
+  dueDay: number | null | undefined,
+): string | null {
+  if (dueDay == null || dueDay < 1 || dueDay > 31) return null;
+  const [sy, sm] = period.start_date.split("-").map(Number);
+  const candidate = (y: number, m: number) => {
+    const daysInMonth = new Date(y, m, 0).getDate(); // m is 1-based here
+    const day = Math.min(dueDay, daysInMonth);
+    return `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  };
+  const inWindow = (d: string) => d >= period.start_date && d <= period.end_date;
+  const first = candidate(sy, sm);
+  if (inWindow(first)) return first;
+  // Cross-month cycle (e.g. 25th→24th): the due day may land in the next month.
+  const ny = sm === 12 ? sy + 1 : sy;
+  const nm = sm === 12 ? 1 : sm + 1;
+  const second = candidate(ny, nm);
+  if (inWindow(second)) return second;
+  return first; // fall back to the start-month occurrence
+}
+
 export async function applyBatch(
   db: DB,
   householdId: number,
@@ -267,6 +298,8 @@ export async function applyBatch(
       planned_amount_cents: c.planned_amount_cents ?? 0,
       actual_amount_cents: c.actual_amount_cents ?? 0,
       due_day: c.due_day ?? null,
+      // Derive the concrete due date so Payments picks it up immediately.
+      due_date: deriveDueDate(period, c.due_day),
       payment_status: c.payment_status ?? "planned",
       is_recurring: c.is_recurring ?? true,
       priority: c.priority ?? 3,
@@ -277,7 +310,10 @@ export async function applyBatch(
     const lineId = Number(id);
     const existing = await db.query.budgetLines.findFirst({ where: eq(budgetLines.id, lineId) });
     if (!existing || existing.period_id !== period.id) throw new HttpError(404, `Line ${id} not in period`);
-    await db.update(budgetLines).set(patch).where(eq(budgetLines.id, lineId));
+    // When the due day changes, re-derive the due date to keep Payments in sync.
+    const set: Record<string, unknown> = { ...patch };
+    if ("due_day" in patch) set.due_date = deriveDueDate(period, patch.due_day);
+    await db.update(budgetLines).set(set).where(eq(budgetLines.id, lineId));
     updated++;
   }
   for (const id of batch.deletes ?? []) {

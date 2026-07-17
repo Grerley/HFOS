@@ -33,7 +33,7 @@ import {
   requireAuth,
   requireWrite,
 } from "./context";
-import { applyBatch, duplicatePeriod, loadLinesForCalc, provisionHousehold, recordAudit } from "./services";
+import { applyBatch, deriveDueDate, duplicatePeriod, loadLinesForCalc, provisionHousehold, recordAudit } from "./services";
 import { generatePeriodInsights, runScenario } from "./insights";
 import { analyzeWorkbook, importWorkbook } from "./import";
 import {
@@ -289,7 +289,8 @@ route("POST", "/budget-periods/:id/lines", async (req, params) => {
   const [line] = await ctx.db.insert(budgetLines).values({
     period_id: period.id, household_id: ctx.householdId, category_id: p.category_id, item_name: p.item_name,
     owner_member_id: p.owner_member_id ?? null, planned_amount_cents: p.planned_amount_cents ?? 0, actual_amount_cents: p.actual_amount_cents ?? 0,
-    due_day: p.due_day ?? null, payment_status: p.payment_status ?? "planned", is_recurring: p.is_recurring ?? true, priority: p.priority ?? 3, notes: p.notes ?? null,
+    due_day: p.due_day ?? null, due_date: p.due_date ?? deriveDueDate(period, p.due_day),
+    payment_status: p.payment_status ?? "planned", is_recurring: p.is_recurring ?? true, priority: p.priority ?? 3, notes: p.notes ?? null,
   }).returning();
   return json(line, 201);
 });
