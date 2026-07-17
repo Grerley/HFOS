@@ -33,7 +33,7 @@ import {
   requireAuth,
   requireWrite,
 } from "./context";
-import { applyBatch, deriveDueDate, duplicatePeriod, loadLinesForCalc, provisionHousehold, recordAudit } from "./services";
+import { applyBatch, backfillDueDates, deriveDueDate, duplicatePeriod, loadLinesForCalc, provisionHousehold, recordAudit } from "./services";
 import { generatePeriodInsights, runScenario } from "./insights";
 import { analyzeWorkbook, importWorkbook } from "./import";
 import {
@@ -293,6 +293,12 @@ route("POST", "/budget-periods/:id/lines", async (req, params) => {
     payment_status: p.payment_status ?? "planned", is_recurring: p.is_recurring ?? true, priority: p.priority ?? 3, notes: p.notes ?? null,
   }).returning();
   return json(line, 201);
+});
+route("POST", "/maintenance/backfill-due-dates", async (req) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const p = await body(req);
+  const day = p.default_due_day != null ? Number(p.default_due_day) : null;
+  return json(await backfillDueDates(ctx.db, ctx.householdId, ctx.userId, day));
 });
 route("POST", "/budget-periods/:id/lines/batch", async (req, params) => {
   const ctx = await requireAuth(req); requireWrite(ctx);

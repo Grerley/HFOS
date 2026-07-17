@@ -14,7 +14,7 @@ import {
 } from "../db/schema";
 import { contentHash } from "../lib/hash";
 import type { LineCalc } from "../lib/calc";
-import { EDITABLE_STATUSES, Role } from "../lib/enums";
+import { EDITABLE_STATUSES, OUTFLOW_TYPES, Role } from "../lib/enums";
 import { DEFAULT_TAXONOMY } from "./taxonomy";
 import { HttpError } from "./context";
 
@@ -271,6 +271,52 @@ export function deriveDueDate(
   const second = candidate(ny, nm);
   if (inWindow(second)) return second;
   return first; // fall back to the start-month occurrence
+}
+
+/**
+ * One-off backfill so existing lines (created before due days existed) get due
+ * dates without hand-editing each one:
+ *   · SYNC — any line that already has a due_day gets its due_date (re)derived.
+ *   · SEED — if defaultDueDay is given, payable (outflow) lines that have no due
+ *     day are assigned it as a sensible starting point, then their date derived.
+ * Income lines are never seeded (they aren't "due"). Locked periods are skipped.
+ * Nothing is invented silently — seeding only happens when the caller opts in
+ * with an explicit day, and every value stays editable afterwards.
+ */
+export async function backfillDueDates(db: DB, householdId: number, actorUserId: number, defaultDueDay?: number | null) {
+  const lines = await db.select().from(budgetLines).where(eq(budgetLines.household_id, householdId));
+  if (!lines.length) return { synced: 0, seeded: 0, skipped_locked: 0, total: 0 };
+
+  const periods = await db.select().from(budgetPeriods).where(eq(budgetPeriods.household_id, householdId));
+  const periodById = new Map(periods.map((p) => [p.id, p]));
+  const cats = await db.select().from(categories).where(eq(categories.household_id, householdId));
+  const typeById = new Map(cats.map((c) => [c.id, c.type]));
+
+  const seedDay = defaultDueDay != null && defaultDueDay >= 1 && defaultDueDay <= 31 ? defaultDueDay : null;
+  let synced = 0, seeded = 0, skipped_locked = 0;
+
+  for (const line of lines) {
+    const period = periodById.get(line.period_id);
+    if (!period) continue;
+    if (!EDITABLE_STATUSES.has(period.status)) { skipped_locked++; continue; }
+
+    if (line.due_day != null) {
+      const due_date = deriveDueDate(period, line.due_day);
+      if (due_date !== line.due_date) {
+        await db.update(budgetLines).set({ due_date }).where(eq(budgetLines.id, line.id));
+        synced++;
+      }
+    } else if (seedDay != null && OUTFLOW_TYPES.has(typeById.get(line.category_id) ?? "expense")) {
+      await db.update(budgetLines).set({ due_day: seedDay, due_date: deriveDueDate(period, seedDay) }).where(eq(budgetLines.id, line.id));
+      seeded++;
+    }
+  }
+
+  await recordAudit(db, {
+    action: "budget_lines.backfill_due_dates", entity_type: "household", entity_id: householdId,
+    household_id: householdId, actor_user_id: actorUserId, detail: { synced, seeded, default_due_day: seedDay },
+  });
+  return { synced, seeded, skipped_locked, total: lines.length };
 }
 
 export async function applyBatch(

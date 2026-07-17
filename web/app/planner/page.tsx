@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
-import { Button, Card, Input, Select, Badge, EmptyState, PageSkeleton } from "@/components/ui";
+import { Button, Card, Input, Select, Badge, EmptyState, PageSkeleton, Modal, Field } from "@/components/ui";
 import NewMonthWizard from "@/components/NewMonthWizard";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent, fromCents, toCents } from "@/lib/format";
@@ -24,6 +24,10 @@ export default function PlannerPage() {
   const [saving, setSaving] = useState(false);
   const [activeSection, setActiveSection] = useState<number | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [backfillOpen, setBackfillOpen] = useState(false);
+  const [backfillDay, setBackfillDay] = useState("");
+  const [backfillBusy, setBackfillBusy] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<{ synced: number; seeded: number; skipped_locked: number; total: number } | null>(null);
   const period = periods.find((p) => p.id === periodId) || null;
   const currency = "ZAR";
   const locked = period?.status === "closed" || period?.status === "archived";
@@ -139,6 +143,24 @@ export default function PlannerPage() {
     await selectPeriod(p.id);
   }
 
+  async function runBackfill() {
+    setBackfillBusy(true);
+    setBackfillResult(null);
+    try {
+      const day = backfillDay.trim() ? Math.max(1, Math.min(31, Number(backfillDay))) : null;
+      const r = await api.post<{ synced: number; seeded: number; skipped_locked: number; total: number }>(
+        "/maintenance/backfill-due-dates",
+        { default_due_day: day },
+      );
+      setBackfillResult(r);
+      if (periodId) await loadPeriod(periodId);
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setBackfillBusy(false);
+    }
+  }
+
   async function setStatus(status: string) {
     if (!period) return;
     await api.patch(`/budget-periods/${period.id}/status`, { status });
@@ -173,8 +195,51 @@ export default function PlannerPage() {
       <PageHeader
         title="Monthly planner"
         description="Plan before spending. Every total is computed server-side."
-        actions={<Button onClick={() => setWizardOpen(true)}>New month</Button>}
+        actions={
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => { setBackfillResult(null); setBackfillOpen(true); }}>Backfill due dates</Button>
+            <Button onClick={() => setWizardOpen(true)}>New month</Button>
+          </div>
+        }
       />
+
+      <Modal
+        open={backfillOpen}
+        onClose={() => setBackfillOpen(false)}
+        title="Backfill due dates"
+        subtitle="Give existing budget lines a due day without editing each one"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setBackfillOpen(false)} disabled={backfillBusy}>Close</Button>
+            <Button onClick={runBackfill} disabled={backfillBusy}>{backfillBusy ? "Working…" : "Run backfill"}</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-ink-soft">
+            This re-syncs the due date for any line that already has a due day. Optionally, set a default
+            day below to also seed it onto payable lines (expenses, savings, investments) that have none —
+            as a starting point you can adjust per line afterwards. Income lines are never touched, and
+            locked periods are skipped.
+          </p>
+          <Field label="Default due day for lines without one (optional, 1–31)">
+            <Input
+              type="number" min={1} max={31} value={backfillDay} placeholder="Leave blank to only sync existing days"
+              onChange={(e) => setBackfillDay(e.target.value)}
+            />
+          </Field>
+          {backfillResult && (
+            <div className="rounded-lg border border-line bg-muted p-3 text-sm">
+              <span className="font-medium text-ink">Done.</span>{" "}
+              <span className="text-ink-soft">
+                Synced {backfillResult.synced} existing, seeded {backfillResult.seeded} new
+                {backfillResult.skipped_locked > 0 ? `, skipped ${backfillResult.skipped_locked} in locked periods` : ""}{" "}
+                (of {backfillResult.total} lines). Payments and the calendar now reflect these dates.
+              </span>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       <NewMonthWizard
         open={wizardOpen}
