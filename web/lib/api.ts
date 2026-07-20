@@ -146,4 +146,16 @@ export const AUTH = {
   me() {
     return request<import("./types").AuthResponse>("/auth/me");
   },
+  forgotPassword(email: string) {
+    return request<{ ok: boolean; message: string }>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
+  resetPassword(token: string, password: string) {
+    return request<{ ok: boolean; message: string }>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, password }),
+    });
+  },
 };

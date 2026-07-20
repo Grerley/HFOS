@@ -20,6 +20,16 @@ export const authAttempts = sqliteTable("auth_attempts", {
   created_at: integer("created_at").default(sql`(unixepoch())`).notNull(),
 });
 
+// Single-use, expiring password-reset tokens. Only the SHA-256 hash is stored.
+export const passwordResetTokens = sqliteTable("password_reset_tokens", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  user_id: integer("user_id").notNull(),
+  token_hash: text("token_hash").notNull(),
+  expires_at: integer("expires_at").notNull(), // unix seconds
+  used_at: integer("used_at"),
+  created_at: integer("created_at").default(sql`(unixepoch())`).notNull(),
+});
+
 export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),

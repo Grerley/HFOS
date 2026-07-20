@@ -27,11 +27,14 @@ import { validatePassword } from "../lib/password";
 import {
   checkLoginRateLimit,
   checkRegisterRateLimit,
+  checkResetRateLimit,
   clearLoginFailures,
   clientIp,
   normalizeEmail,
   recordAttempt,
 } from "./security";
+import { emailShell, sendEmail } from "./email";
+import { consumeResetToken, createResetToken } from "./passwordReset";
 import { derivePaymentFlags, LOCKED_STATUSES, PeriodStatus } from "../lib/enums";
 import {
   Ctx,
@@ -190,6 +193,57 @@ async function loginHandler(req: Request) {
 }
 route("POST", "/auth/login", loginHandler);
 route("POST", "/auth/login/json", loginHandler);
+
+// ── Password reset (no account enumeration; email may be disabled) ────────────
+route("POST", "/auth/forgot-password", async (req) => {
+  const env = getEnv();
+  const db = getDb(env);
+  const p = await body(req);
+  const emailKey = normalizeEmail(p.email);
+  const ip = clientIp(req);
+
+  const rl = await checkResetRateLimit(db, emailKey, ip);
+  if (rl.limited) {
+    await recordAttempt(db, "reset", emailKey, ip, "rate_limited");
+    throw new HttpError(429, "Too many reset requests. Please try again later.");
+  }
+  await recordAttempt(db, "reset", emailKey, ip, "requested");
+
+  const user = emailKey ? (await db.select().from(users).where(eq(users.email, p.email))).at(0) : undefined;
+  if (user) {
+    const token = await createResetToken(db, user.id);
+    const link = `${new URL(req.url).origin}/reset-password?token=${token}`;
+    const html = emailShell(
+      "Reset your password",
+      `<p style="font-size:14px;line-height:1.5;">We received a request to reset your HFOS password. This link expires in 1 hour.</p>
+       <p style="margin:20px 0;"><a href="${link}" style="display:inline-block;background:#16324f;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;">Reset password</a></p>
+       <p style="color:#6b7891;font-size:12px;line-height:1.5;">If the button doesn't work, paste this into your browser:<br>${link}</p>
+       <p style="color:#6b7891;font-size:12px;">If you didn't request this, you can safely ignore this email.</p>`,
+    );
+    await sendEmail(env, { to: p.email, subject: "Reset your HFOS password", html, text: `Reset your HFOS password (expires in 1 hour): ${link}` });
+    await recordAudit(db, { action: "auth.reset_requested", entity_type: "user", entity_id: user.id, actor_user_id: user.id, detail: { ip } });
+  }
+  // Identical response whether or not the email exists.
+  return json({ ok: true, message: "If that email is registered, a reset link is on its way." });
+});
+
+route("POST", "/auth/reset-password", async (req) => {
+  const db = getDb(getEnv());
+  const p = await body(req);
+  if (!p.token || !p.password) throw new HttpError(422, "Token and new password are required");
+  const pwError = validatePassword(p.password);
+  if (pwError) throw new HttpError(422, pwError);
+  const result = await consumeResetToken(db, p.token, p.password);
+  if (!result.ok) {
+    const msg =
+      result.reason === "expired" ? "This reset link has expired — request a new one."
+      : result.reason === "used" ? "This reset link has already been used."
+      : "This reset link is invalid.";
+    throw new HttpError(400, msg);
+  }
+  await recordAudit(db, { action: "auth.reset_completed", entity_type: "user", entity_id: result.userId, actor_user_id: result.userId ?? null });
+  return json({ ok: true, message: "Your password has been reset. You can now sign in." });
+});
 
 route("GET", "/auth/me", async (req) => {
   const ctx = await requireAuth(req);

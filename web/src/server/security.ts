@@ -17,6 +17,14 @@ const IP_MAX_ATTEMPTS = 30;
 const REGISTER_WINDOW_SEC = 60 * 60;
 const REGISTER_IP_MAX = 8;
 
+// Password reset: cap requests per IP and per email to stop reset-spam.
+const RESET_WINDOW_SEC = 60 * 60;
+const RESET_IP_MAX = 10;
+const RESET_EMAIL_MAX = 5;
+
+export type AttemptKind = "login" | "register" | "reset";
+export type AttemptOutcome = "success" | "bad_password" | "no_user" | "rate_limited" | "requested";
+
 export function clientIp(req: Request): string {
   return (
     req.headers.get("CF-Connecting-IP") ||
@@ -71,12 +79,25 @@ export async function checkRegisterRateLimit(db: DB, ip: string): Promise<RateVe
   return { limited: false, retryAfterSec: 0 };
 }
 
+export async function checkResetRateLimit(db: DB, emailKey: string, ip: string): Promise<RateVerdict> {
+  const ipCount = await countWhere(
+    db,
+    sql`ip = ${ip} AND kind = 'reset' AND created_at > (unixepoch() - ${RESET_WINDOW_SEC})`,
+  );
+  if (ipCount >= RESET_IP_MAX) return { limited: true, retryAfterSec: RESET_WINDOW_SEC, reason: "ip" };
+  const emailCount = emailKey
+    ? await countWhere(db, sql`email = ${emailKey} AND kind = 'reset' AND created_at > (unixepoch() - ${RESET_WINDOW_SEC})`)
+    : 0;
+  if (emailCount >= RESET_EMAIL_MAX) return { limited: true, retryAfterSec: RESET_WINDOW_SEC, reason: "email" };
+  return { limited: false, retryAfterSec: 0 };
+}
+
 export async function recordAttempt(
   db: DB,
-  kind: "login" | "register",
+  kind: AttemptKind,
   emailKey: string,
   ip: string,
-  outcome: "success" | "bad_password" | "no_user" | "rate_limited",
+  outcome: AttemptOutcome,
 ): Promise<void> {
   await db.insert(authAttempts).values({ email: emailKey || null, ip, kind, outcome });
 }

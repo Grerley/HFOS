@@ -11,6 +11,10 @@ export interface Env {
   AI?: unknown;
   // Optional higher-quality provider; set as an encrypted secret to enable.
   ANTHROPIC_API_KEY?: string;
+  // Transactional email (password reset, invites). Both optional — email stays
+  // disabled until RESEND_API_KEY is set. EMAIL_FROM is a non-secret [vars] value.
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
 }
 
 export type DB = DrizzleD1Database<typeof schema>;

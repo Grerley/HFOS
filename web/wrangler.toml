@@ -28,3 +28,7 @@ binding = "AI"
 #   "anthropic" (set ANTHROPIC_API_KEY secret for higher quality), or "rules".
 [vars]
 HFOS_COPILOT_PROVIDER = "workers-ai"
+# Transactional email sender. Resend's onboarding domain works out of the box but
+# only delivers to your own account email — replace with a verified domain address
+# (e.g. "HFOS <noreply@yourdomain.com>") once you've verified a domain in Resend.
+EMAIL_FROM = "HFOS <onboarding@resend.dev>"

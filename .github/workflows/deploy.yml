@@ -57,3 +57,25 @@ jobs:
         run: printf '%s' "$HFOS_SECRET_KEY" | npx wrangler secret put HFOS_SECRET_KEY
         env:
           HFOS_SECRET_KEY: ${{ secrets.HFOS_SECRET_KEY }}
+
+      # Optional secrets — synced only when set, so the deploy never fails if a
+      # secret hasn't been added yet. Add these in Settings → Secrets → Actions.
+      - name: Sync Resend API key (if set)
+        run: |
+          if [ -n "$RESEND_API_KEY" ]; then
+            printf '%s' "$RESEND_API_KEY" | npx wrangler secret put RESEND_API_KEY
+          else
+            echo "RESEND_API_KEY not set — email delivery stays disabled."
+          fi
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+
+      - name: Sync Anthropic API key (if set)
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            printf '%s' "$ANTHROPIC_API_KEY" | npx wrangler secret put ANTHROPIC_API_KEY
+          else
+            echo "ANTHROPIC_API_KEY not set — copilot uses Workers AI."
+          fi
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

@@ -48,6 +48,9 @@ export default function LoginPage() {
           <Button type="submit" disabled={busy} className="w-full">
             {busy ? "Signing in…" : "Sign in"}
           </Button>
+          <p className="text-center text-xs">
+            <Link href="/forgot-password" className="text-ink-muted underline hover:text-ink">Forgot password?</Link>
+          </p>
           <p className="text-center text-xs text-ink-muted">
             No account? <Link href="/register" className="text-brand underline">Create household</Link>
           </p>
