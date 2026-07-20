@@ -9,6 +9,17 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 const ts = () => integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull();
 const tsu = () => integer("updated_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull();
 
+// Auth attempts drive login/register rate-limiting + lockout. created_at is a raw
+// unix-seconds integer so it can be compared directly against unixepoch() in SQL.
+export const authAttempts = sqliteTable("auth_attempts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  email: text("email"),
+  ip: text("ip"),
+  kind: text("kind").notNull(), // 'login' | 'register'
+  outcome: text("outcome").notNull(), // 'success' | 'bad_password' | 'no_user' | 'rate_limited'
+  created_at: integer("created_at").default(sql`(unixepoch())`).notNull(),
+});
+
 export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),

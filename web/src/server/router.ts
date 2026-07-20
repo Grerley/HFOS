@@ -23,6 +23,15 @@ import {
 import * as calc from "../lib/calc";
 import { createAccessToken } from "../lib/auth";
 import { hashPassword, verifyPassword } from "../lib/hash";
+import { validatePassword } from "../lib/password";
+import {
+  checkLoginRateLimit,
+  checkRegisterRateLimit,
+  clearLoginFailures,
+  clientIp,
+  normalizeEmail,
+  recordAttempt,
+} from "./security";
 import { derivePaymentFlags, LOCKED_STATUSES, PeriodStatus } from "../lib/enums";
 import {
   Ctx,
@@ -130,14 +139,27 @@ route("POST", "/auth/register", async (req) => {
   const env = getEnv();
   const db = getDb(env);
   const p = await body(req);
-  if (!p.email || !p.password || p.password.length < 8) throw new HttpError(422, "Invalid registration");
+  const ip = clientIp(req);
+  const emailKey = normalizeEmail(p.email);
+
+  const rl = await checkRegisterRateLimit(db, ip);
+  if (rl.limited) {
+    await recordAttempt(db, "register", emailKey, ip, "rate_limited");
+    await recordAudit(db, { action: "auth.register_rate_limited", entity_type: "auth", detail: { ip } });
+    throw new HttpError(429, "Too many sign-ups from this network. Please try again later.");
+  }
+  if (!p.email || !p.password) throw new HttpError(422, "Email and password are required");
+  const pwError = validatePassword(p.password, p.email);
+  if (pwError) throw new HttpError(422, pwError);
+
   const existing = await db.select().from(users).where(eq(users.email, p.email));
   if (existing.length) throw new HttpError(409, "Email already registered");
   const [user] = await db.insert(users).values({
     name: p.name, email: p.email, phone: p.phone ?? null, password_hash: await hashPassword(p.password),
   }).returning();
   await provisionHousehold(db, { id: user.id, name: user.name }, { name: p.household_name || `${p.name}'s household` });
-  await recordAudit(db, { action: "user.register", entity_type: "user", entity_id: user.id, actor_user_id: user.id });
+  await recordAttempt(db, "register", emailKey, ip, "success");
+  await recordAudit(db, { action: "auth.register", entity_type: "user", entity_id: user.id, actor_user_id: user.id, detail: { ip } });
   return tokenResponse(db, user);
 });
 
@@ -145,8 +167,25 @@ async function loginHandler(req: Request) {
   const db = getDb(getEnv());
   const p = await body(req);
   const email = p.email ?? p.username;
+  const emailKey = normalizeEmail(email);
+  const ip = clientIp(req);
+
+  const rl = await checkLoginRateLimit(db, emailKey, ip);
+  if (rl.limited) {
+    await recordAttempt(db, "login", emailKey, ip, "rate_limited");
+    await recordAudit(db, { action: "auth.login_rate_limited", entity_type: "auth", detail: { email: emailKey, ip, reason: rl.reason } });
+    throw new HttpError(429, `Too many attempts. Please try again in about ${Math.ceil(rl.retryAfterSec / 60)} minutes.`);
+  }
+
   const user = (await db.select().from(users).where(eq(users.email, email))).at(0);
-  if (!user || !(await verifyPassword(p.password, user.password_hash))) throw new HttpError(401, "Invalid email or password");
+  if (!user || !(await verifyPassword(p.password, user.password_hash))) {
+    await recordAttempt(db, "login", emailKey, ip, user ? "bad_password" : "no_user");
+    await recordAudit(db, { action: "auth.login_failed", entity_type: "auth", actor_user_id: user?.id ?? null, detail: { email: emailKey, ip, reason: user ? "bad_password" : "no_user" } });
+    throw new HttpError(401, "Invalid email or password");
+  }
+  await clearLoginFailures(db, emailKey);
+  await recordAttempt(db, "login", emailKey, ip, "success");
+  await recordAudit(db, { action: "auth.login_success", entity_type: "user", entity_id: user.id, actor_user_id: user.id, detail: { ip } });
   return tokenResponse(db, user);
 }
 route("POST", "/auth/login", loginHandler);
@@ -192,7 +231,11 @@ route("POST", "/members/invite", async (req) => {
   const ctx = await requireAuth(req); requireAdmin(ctx);
   const p = await body(req);
   let u = (await ctx.db.select().from(users).where(eq(users.email, p.email))).at(0);
-  if (!u) [u] = await ctx.db.insert(users).values({ name: p.name, email: p.email, password_hash: await hashPassword(p.password) }).returning();
+  if (!u) {
+    const pwError = validatePassword(p.password ?? "", p.email);
+    if (pwError) throw new HttpError(422, pwError);
+    [u] = await ctx.db.insert(users).values({ name: p.name, email: p.email, password_hash: await hashPassword(p.password) }).returning();
+  }
   const existing = await ctx.db.select().from(memberships).where(and(eq(memberships.user_id, u.id), eq(memberships.household_id, ctx.householdId)));
   if (existing.length) throw new HttpError(409, "User already a member of this household");
   await ctx.db.insert(memberships).values({ user_id: u.id, household_id: ctx.householdId, role: p.role ?? "partner" });
