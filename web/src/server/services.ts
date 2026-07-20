@@ -15,7 +15,8 @@ import {
 } from "../db/schema";
 import { contentHash } from "../lib/hash";
 import type { LineCalc } from "../lib/calc";
-import { derivePaymentFlags, EDITABLE_STATUSES, OUTFLOW_TYPES, Role } from "../lib/enums";
+import { titheAmount } from "../lib/calc";
+import { CategoryType, derivePaymentFlags, EDITABLE_STATUSES, OUTFLOW_TYPES, Role } from "../lib/enums";
 import { DEFAULT_TAXONOMY } from "./taxonomy";
 import { HttpError } from "./context";
 
@@ -201,6 +202,7 @@ export async function duplicatePeriod(
         // Carry the settlement configuration forward.
         payment_type: line.payment_type,
         ...derivePaymentFlags(line.payment_type),
+        is_tithe: line.is_tithe,
         due_note: line.due_note,
         recurrence: line.recurrence,
         payment_status: "planned",
@@ -225,6 +227,7 @@ export async function duplicatePeriod(
     }
     copied++;
   }
+  await recomputeTitheLines(db, householdId, np.id);
   await recordAudit(db, {
     action: "budget_period.duplicate",
     entity_type: "budget_period",
@@ -245,6 +248,7 @@ interface LineInput {
   due_day?: number | null;
   payment_status?: string;
   payment_type?: string | null;
+  is_tithe?: boolean;
   is_recurring?: boolean;
   priority?: number;
 }
@@ -360,6 +364,36 @@ export async function removeMember(db: DB, householdId: number, memberId: number
   });
 }
 
+/**
+ * Recompute every opt-in tithe line in a period as 10% of its owner member's
+ * income (income lines owned by that member). Called after any period edit so
+ * the tithe always tracks the latest income. Lines with no owner resolve to 0.
+ */
+export async function recomputeTitheLines(db: DB, householdId: number, periodId: number) {
+  const lines = await db.select().from(budgetLines)
+    .where(and(eq(budgetLines.period_id, periodId), eq(budgetLines.household_id, householdId)));
+  const titheLines = lines.filter((l) => l.is_tithe);
+  if (!titheLines.length) return;
+
+  const catIds = [...new Set(lines.map((l) => l.category_id))];
+  const cats = catIds.length ? await db.select().from(categories).where(inArray(categories.id, catIds)) : [];
+  const typeById = new Map(cats.map((c) => [c.id, c.type]));
+
+  const incomeByOwner = new Map<number, number>();
+  for (const l of lines) {
+    if (typeById.get(l.category_id) === CategoryType.INCOME && l.owner_member_id != null) {
+      incomeByOwner.set(l.owner_member_id, (incomeByOwner.get(l.owner_member_id) ?? 0) + l.planned_amount_cents);
+    }
+  }
+  for (const t of titheLines) {
+    const income = t.owner_member_id != null ? incomeByOwner.get(t.owner_member_id) ?? 0 : 0;
+    const amount = titheAmount(income);
+    if (amount !== t.planned_amount_cents) {
+      await db.update(budgetLines).set({ planned_amount_cents: amount }).where(eq(budgetLines.id, t.id));
+    }
+  }
+}
+
 export async function applyBatch(
   db: DB,
   householdId: number,
@@ -390,6 +424,7 @@ export async function applyBatch(
       payment_status: c.payment_status ?? "planned",
       payment_type: c.payment_type ?? "manual",
       ...derivePaymentFlags(c.payment_type),
+      is_tithe: c.is_tithe ?? false,
       is_recurring: c.is_recurring ?? true,
       priority: c.priority ?? 3,
     });
@@ -414,6 +449,8 @@ export async function applyBatch(
       deleted++;
     }
   }
+  // Keep opt-in tithe lines in sync with the latest owner income.
+  await recomputeTitheLines(db, householdId, period.id);
   await recordAudit(db, {
     action: "budget_lines.batch_save",
     entity_type: "budget_period",

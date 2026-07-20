@@ -64,6 +64,7 @@ export interface Line {
   recurrence: string;
   payment_status: string;
   payment_type?: string;
+  is_tithe?: boolean;
   is_recurring: boolean;
   priority: number;
   needs_review: boolean;

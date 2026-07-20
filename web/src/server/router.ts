@@ -47,7 +47,7 @@ import {
   requireAuth,
   requireWrite,
 } from "./context";
-import { applyBatch, backfillDueDates, deriveDueDate, duplicatePeriod, loadLinesForCalc, provisionHousehold, recordAudit, removeMember } from "./services";
+import { applyBatch, backfillDueDates, deriveDueDate, duplicatePeriod, loadLinesForCalc, provisionHousehold, recomputeTitheLines, recordAudit, removeMember } from "./services";
 import { generatePeriodInsights, runScenario } from "./insights";
 import { analyzeWorkbook, importWorkbook } from "./import";
 import {
@@ -471,9 +471,10 @@ route("POST", "/budget-periods/:id/lines", async (req, params) => {
     owner_member_id: p.owner_member_id ?? null, planned_amount_cents: p.planned_amount_cents ?? 0, actual_amount_cents: p.actual_amount_cents ?? 0,
     due_day: p.due_day ?? null, due_date: p.due_date ?? deriveDueDate(period, p.due_day),
     payment_status: p.payment_status ?? "planned", payment_type: p.payment_type ?? "manual", ...derivePaymentFlags(p.payment_type),
-    is_recurring: p.is_recurring ?? true, priority: p.priority ?? 3, notes: p.notes ?? null,
+    is_tithe: p.is_tithe ?? false, is_recurring: p.is_recurring ?? true, priority: p.priority ?? 3, notes: p.notes ?? null,
   }).returning();
-  return json(line, 201);
+  if (p.is_tithe) await recomputeTitheLines(ctx.db, ctx.householdId, period.id);
+  return json((await ctx.db.select().from(budgetLines).where(eq(budgetLines.id, line.id))).at(0), 201);
 });
 route("POST", "/maintenance/backfill-due-dates", async (req) => {
   const ctx = await requireAuth(req); requireWrite(ctx);

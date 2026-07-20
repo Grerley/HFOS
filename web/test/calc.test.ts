@@ -116,6 +116,14 @@ describe("calculation engine", () => {
     expect(calc.expectedValue(1000000, 7500)).toBe(750000);
   });
 
+  it("tithe is 10% of income, rounded, never negative", () => {
+    expect(calc.titheAmount(1000000)).toBe(100000); // 10% of 10,000.00
+    expect(calc.titheAmount(123455)).toBe(12346); // rounds to nearest cent
+    expect(calc.titheAmount(0)).toBe(0);
+    expect(calc.titheAmount(-500)).toBe(0);
+    expect(calc.titheAmount(1000000, 1250)).toBe(125000); // configurable rate (12.5%)
+  });
+
   it("monthly bond repayment matches amortisation", () => {
     const pay = calc.monthlyBondRepayment(100000000, 0.115, 240);
     expect(Math.abs(pay - 1066429)).toBeLessThanOrEqual(50);

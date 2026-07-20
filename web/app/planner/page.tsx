@@ -49,6 +49,27 @@ export default function PlannerPage() {
     [catMap],
   );
 
+  // Live tithe preview: 10% of the owner's income lines in the current draft.
+  const ownerIncomeCents = useCallback(
+    (ownerId: number | null | undefined) => {
+      if (ownerId == null) return 0;
+      return rows
+        .filter((r) => r.owner_member_id === ownerId && catMap.get(r.category_id)?.type === "income")
+        .reduce((s, r) => s + r.planned_amount_cents, 0);
+    },
+    [rows, catMap],
+  );
+  const tithePreview = useCallback((line: EditRow) => Math.round(ownerIncomeCents(line.owner_member_id) * 0.1), [ownerIncomeCents]);
+
+  function setTithe(id: number, on: boolean) {
+    setRows((rs) => rs.map((r) => {
+      if (r.id !== id) return r;
+      const next = { ...r, is_tithe: on, _dirty: true };
+      if (on) next.planned_amount_cents = Math.round(ownerIncomeCents(r.owner_member_id) * 0.1);
+      return next;
+    }));
+  }
+
   const loadPeriod = useCallback(async (pid: number) => {
     const [lines, sum] = await Promise.all([
       api.get<Line[]>(`/budget-periods/${pid}/lines`),
@@ -102,7 +123,7 @@ export default function PlannerPage() {
       {
         id: -Date.now(), period_id: periodId!, category_id: child?.id ?? activeSection ?? 0,
         item_name: "", planned_amount_cents: 0, actual_amount_cents: 0, recurrence: "monthly",
-        payment_status: "planned", payment_type: "manual", is_recurring: true, priority: 3, needs_review: false, _new: true,
+        payment_status: "planned", payment_type: "manual", is_tithe: false, is_recurring: true, priority: 3, needs_review: false, _new: true,
       } as EditRow,
     ]);
   }
@@ -121,7 +142,7 @@ export default function PlannerPage() {
         category_id: r.category_id, item_name: r.item_name, owner_member_id: r.owner_member_id,
         planned_amount_cents: r.planned_amount_cents, actual_amount_cents: r.actual_amount_cents,
         due_day: r.due_day, payment_status: r.payment_status, payment_type: r.payment_type ?? "manual",
-        is_recurring: r.is_recurring, priority: r.priority,
+        is_tithe: r.is_tithe ?? false, is_recurring: r.is_recurring, priority: r.priority,
       }));
       const updates: Record<number, any> = {};
       rows.filter((r) => r._dirty && !r._new).forEach((r) => {
@@ -129,6 +150,7 @@ export default function PlannerPage() {
           category_id: r.category_id, item_name: r.item_name, owner_member_id: r.owner_member_id,
           planned_amount_cents: r.planned_amount_cents, actual_amount_cents: r.actual_amount_cents,
           payment_status: r.payment_status, due_day: r.due_day ?? null, payment_type: r.payment_type ?? "manual",
+          is_tithe: r.is_tithe ?? false,
         };
       });
       await api.post(`/budget-periods/${periodId}/lines/batch`, { creates, updates, deletes });
@@ -188,7 +210,8 @@ export default function PlannerPage() {
   ];
   const countFor = (sid: number | null) => rows.filter((r) => sectionIdOf(r.category_id) === sid).length;
   const plannedFor = (sid: number | null) =>
-    rows.filter((r) => sectionIdOf(r.category_id) === sid).reduce((s, r) => s + r.planned_amount_cents, 0);
+    rows.filter((r) => sectionIdOf(r.category_id) === sid)
+      .reduce((s, r) => s + (r.is_tithe ? tithePreview(r) : r.planned_amount_cents), 0);
   const visibleRows = rows.filter((r) => sectionIdOf(r.category_id) === activeSection);
   const activeName = tabs.find((t) => t.id === activeSection)?.name ?? "Section";
 
@@ -396,10 +419,26 @@ export default function PlannerPage() {
                         )}
                       </td>
                       <td className="py-1.5 pr-3 text-right">
-                        {locked ? formatMoney(r.planned_amount_cents, currency) : (
-                          <Input type="number" step="0.01" defaultValue={fromCents(r.planned_amount_cents)}
-                            onChange={(e) => editRow(r.id, { planned_amount_cents: toCents(e.target.value) })}
-                            className="w-28 text-right tabular" />
+                        {locked ? (
+                          formatMoney(r.is_tithe ? tithePreview(r) : r.planned_amount_cents, currency)
+                        ) : r.is_tithe ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <span className="tabular text-ink">{formatMoney(tithePreview(r), currency)}</span>
+                            <button type="button" onClick={() => setTithe(r.id, false)}
+                              title="Auto tithe: 10% of this owner's income. Click to switch to a manual amount."
+                              className="rounded bg-brand-light px-1 text-[10px] font-medium text-brand-dark">10%</button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-1">
+                            <Input type="number" step="0.01" defaultValue={fromCents(r.planned_amount_cents)}
+                              onChange={(e) => editRow(r.id, { planned_amount_cents: toCents(e.target.value) })}
+                              className="w-24 text-right tabular" />
+                            {["expense", "saving", "investment"].includes(catMap.get(r.category_id)?.type ?? "") && (
+                              <button type="button" onClick={() => setTithe(r.id, true)}
+                                title="Make this a tithe: auto-calculate as 10% of the owner's income."
+                                className="rounded border border-line px-1 text-[10px] text-ink-muted hover:border-brand hover:text-brand-dark">T</button>
+                            )}
+                          </div>
                         )}
                       </td>
                       <td className="py-1.5 pr-3 text-right">

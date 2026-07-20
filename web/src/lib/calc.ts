@@ -269,6 +269,15 @@ export function goalProgress(targetCents: number, currentCents: number): number 
   return round6(Math.min(currentCents / targetCents, 1));
 }
 
+// ── Tithe ────────────────────────────────────────────────────────────────────
+export const TITHE_RATE_BP = 1000; // 10% in basis points
+
+/** Tithe = a share (default 10%) of an owner's income, rounded to the nearest cent. */
+export function titheAmount(incomeCents: number, rateBp: number = TITHE_RATE_BP): number {
+  if (incomeCents <= 0) return 0;
+  return Math.round((incomeCents * rateBp) / 10000);
+}
+
 // ── Receivables / weighted inflows ───────────────────────────────────────────
 export function expectedValue(amountCents: number, probabilityBp: number): number {
   return Math.floor((amountCents * probabilityBp) / 10000);

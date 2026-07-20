@@ -167,6 +167,9 @@ export const budgetLines = sqliteTable("budget_lines", {
   due_date: text("due_date"), // ISO date the payment is due (drives overdue + calendar)
   responsible_member_id: integer("responsible_member_id"), // accountable person
   source_account_id: integer("source_account_id"), // expected paying account
+  // Opt-in tithe: when true, planned_amount_cents is auto-derived as 10% of the
+  // owner member's income for the period (recomputed on save).
+  is_tithe: integer("is_tithe", { mode: "boolean" }).default(false).notNull(),
   // How this obligation is settled (source of truth); the booleans below are derived.
   payment_type: text("payment_type").default("manual").notNull(),
   is_debit_order: integer("is_debit_order", { mode: "boolean" }).default(false).notNull(),
