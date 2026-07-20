@@ -4,6 +4,7 @@ import AppShell, { PageHeader } from "@/components/AppShell";
 import { Button, Card, Badge, EmptyState, PageSkeleton } from "@/components/ui";
 import ScenarioWizard from "@/components/ScenarioWizard";
 import { api } from "@/lib/api";
+import { useCurrency } from "@/lib/currency";
 import { formatMoney, formatPercent } from "@/lib/format";
 import type { Period, Scenario } from "@/lib/types";
 
@@ -13,7 +14,7 @@ export default function ScenariosPage() {
   const [loading, setLoading] = useState(true);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
-  const currency = "ZAR";
+  const currency = useCurrency();
 
   async function load() {
     const [sc, ps] = await Promise.all([api.get<Scenario[]>("/scenarios"), api.get<Period[]>("/budget-periods")]);

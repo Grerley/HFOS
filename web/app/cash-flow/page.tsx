@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Card, StatCard, Badge, EmptyState, PageSkeleton, ErrorState } from "@/components/ui";
 import { BalanceChart } from "@/components/viz";
 import { api } from "@/lib/api";
+import { useCurrency } from "@/lib/currency";
 import { formatMoney } from "@/lib/format";
 
 interface CashFlow {
@@ -28,7 +29,7 @@ const shortDate = (iso: string) =>
 
 export default function CashFlowPage() {
   const [data, setData] = useState<CashFlow | null>(null);
-  const [currency, setCurrency] = useState("ZAR");
+  const currency = useCurrency();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -36,12 +37,7 @@ export default function CashFlowPage() {
     setLoading(true);
     setError(false);
     try {
-      const [cf, dash] = await Promise.all([
-        api.get<CashFlow>("/reports/cash-flow"),
-        api.get<any>("/dashboard").catch(() => null),
-      ]);
-      setData(cf);
-      if (dash?.currency) setCurrency(dash.currency);
+      setData(await api.get<CashFlow>("/reports/cash-flow"));
     } catch {
       setError(true);
     } finally {

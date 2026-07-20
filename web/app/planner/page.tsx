@@ -5,6 +5,7 @@ import { Button, Card, Input, Select, Badge, EmptyState, PageSkeleton, Modal, Fi
 import NewMonthWizard from "@/components/NewMonthWizard";
 import { api } from "@/lib/api";
 import { PAYMENT_TYPE_OPTIONS } from "@/lib/paymentTypes";
+import { useCurrency } from "@/lib/currency";
 import { formatMoney, formatPercent, fromCents, toCents } from "@/lib/format";
 import type { Category, Line, Member, Period, PeriodSummary } from "@/lib/types";
 
@@ -30,7 +31,7 @@ export default function PlannerPage() {
   const [backfillBusy, setBackfillBusy] = useState(false);
   const [backfillResult, setBackfillResult] = useState<{ synced: number; seeded: number; skipped_locked: number; total: number } | null>(null);
   const period = periods.find((p) => p.id === periodId) || null;
-  const currency = "ZAR";
+  const currency = useCurrency();
   const locked = period?.status === "closed" || period?.status === "archived";
 
   // ── Section helpers ─────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
 import { Button, Card, Field, Input, Select, Badge, PageSkeleton, ErrorState } from "@/components/ui";
 import { api } from "@/lib/api";
+import { useCurrency } from "@/lib/currency";
 import { formatMoney, toCents } from "@/lib/format";
 import type { Category, Member } from "@/lib/types";
 
@@ -14,6 +15,7 @@ export default function SettingsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const currency = useCurrency();
 
   async function load() {
     setLoading(true);
@@ -120,7 +122,7 @@ export default function SettingsPage() {
             {accounts.map((a) => (
               <div key={a.id} className="flex items-center justify-between rounded-lg bg-muted px-4 py-2">
                 <span className="text-sm">{a.name} <span className="text-xs text-ink-muted">· {a.type}</span></span>
-                <span className="tabular text-sm">{formatMoney(a.current_balance_cents)}</span>
+                <span className="tabular text-sm">{formatMoney(a.current_balance_cents, currency)}</span>
               </div>
             ))}
           </div>

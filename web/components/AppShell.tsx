@@ -6,6 +6,7 @@ import { AUTH, getHouseholdId, getToken, logout, setHouseholdId } from "@/lib/ap
 import type { Household } from "@/lib/types";
 import { ThemeControls } from "@/components/theme";
 import OfflineBanner from "@/components/OfflineBanner";
+import { CurrencyContext } from "@/lib/currency";
 
 // Primary navigation (information architecture §5.1).
 const NAV = [
@@ -58,8 +59,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const active = households.find((h) => h.id === activeHh) ?? households[0];
+  const currency = active?.base_currency || "ZAR";
 
   return (
+    <CurrencyContext.Provider value={currency}>
     <div className="flex min-h-screen bg-surface text-ink">
       <a href="#main" className="skip-link">Skip to content</a>
       {/* Desktop sidebar */}
@@ -150,6 +153,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         })}
       </nav>
     </div>
+    </CurrencyContext.Provider>
   );
 }
 

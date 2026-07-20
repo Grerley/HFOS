@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
 import { Card, StatCard, EmptyState, PageSkeleton, Badge, ErrorState } from "@/components/ui";
+import { useCurrency } from "@/lib/currency";
 import { ProgressBar } from "@/components/viz";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent } from "@/lib/format";
@@ -15,7 +16,7 @@ export default function WealthPage() {
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const currency = dash?.currency || "ZAR";
+  const currency = useCurrency();
 
   async function load() {
     setLoading(true);

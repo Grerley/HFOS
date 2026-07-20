@@ -4,6 +4,7 @@ import AppShell, { PageHeader } from "@/components/AppShell";
 import { Button, Card, Field, Input, Select, EmptyState, PageSkeleton } from "@/components/ui";
 import PaymentCalendar from "@/components/PaymentCalendar";
 import { PAYMENT_TYPE_OPTIONS, PAYMENT_TYPE_LABEL } from "@/lib/paymentTypes";
+import { useCurrency } from "@/lib/currency";
 import { api } from "@/lib/api";
 import { formatMoney, formatPercent, toCents } from "@/lib/format";
 import type { Member, Period } from "@/lib/types";
@@ -32,7 +33,6 @@ interface PaymentRec {
   is_reversal: boolean; notes: string | null; reference: string | null;
 }
 
-const CUR = "ZAR";
 const METHODS = ["debit_order", "eft", "card", "cash", "internal_transfer", "stop_order", "bank_app", "other"];
 
 const STATUS_STYLE: Record<string, { label: string; cls: string; icon: string }> = {
@@ -84,6 +84,7 @@ export default function PaymentsPage() {
   const [view, setView] = useState<"list" | "calendar">("list");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const CUR = useCurrency();
 
   const loadSettlement = useCallback(async (pid: number) => {
     setData(await api.get<Settlement>(`/budget-periods/${pid}/settlement`));
@@ -364,6 +365,7 @@ function ExpandedRow({ line, history, members, accounts, onChanged, onAddPayment
   line: SettleLine; history: PaymentRec[]; members: Member[]; accounts: Account[];
   onChanged: () => Promise<void>; onAddPayment: () => void; onMarkFull?: () => void; onConfirm?: () => void;
 }) {
+  const CUR = useCurrency();
   const [comment, setComment] = useState("");
   const [cfg, setCfg] = useState({
     due_date: line.due_date ?? "", responsible_member_id: line.responsible_member_id ?? "",
@@ -458,6 +460,7 @@ function AddPaymentModal({ line, prefill, members, accounts, onClose, onSaved }:
   line: SettleLine; prefill: number; members: Member[]; accounts: Account[];
   onClose: () => void; onSaved: () => void;
 }) {
+  const CUR = useCurrency();
   const [form, setForm] = useState({
     amount: (prefill > 0 ? prefill : line.planned_cents) / 100,
     payment_date: "", payment_method: "eft", paid_by_member_id: "", source_account_id: "", reference: "", notes: "",
@@ -527,6 +530,7 @@ function PaymentCard({ line, expanded, onToggle, onPay, onConfirm, onMarkFull, h
   line: SettleLine; expanded: boolean; onToggle: () => void; onPay: () => void; onConfirm: () => void; onMarkFull: () => void;
   history: PaymentRec[]; members: Member[]; accounts: Account[]; onChanged: () => Promise<void>; onAddPayment: () => void;
 }) {
+  const CUR = useCurrency();
   return (
     <div className="rounded-xl border border-line bg-card p-4 shadow-sm">
       <div className="flex items-start justify-between gap-2">
@@ -561,6 +565,7 @@ function PaymentCard({ line, expanded, onToggle, onPay, onConfirm, onMarkFull, h
 
 // Debit-order confirmation flow (FR-022, UX-007): did it go off, and for how much?
 function ConfirmDebitModal({ line, onClose, onSaved }: { line: SettleLine; onClose: () => void; onSaved: () => void }) {
+  const CUR = useCurrency();
   const typeLabel = PAYMENT_TYPE_LABEL[line.payment_type ?? ""] ?? "Debit order";
   const [outcome, setOutcome] = useState<"confirmed" | "different" | "failed">("confirmed");
   const [amount, setAmount] = useState<number | string>(line.outstanding_cents / 100);

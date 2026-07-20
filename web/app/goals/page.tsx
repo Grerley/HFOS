@@ -4,6 +4,7 @@ import AppShell, { PageHeader } from "@/components/AppShell";
 import { Button, Card, Field, Input, EmptyState, PageSkeleton, ErrorState } from "@/components/ui";
 import { ProgressBar } from "@/components/viz";
 import { api } from "@/lib/api";
+import { useCurrency } from "@/lib/currency";
 import { formatMoney, formatPercent, toCents } from "@/lib/format";
 import type { Goal } from "@/lib/types";
 
@@ -12,7 +13,7 @@ export default function GoalsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const currency = "ZAR";
+  const currency = useCurrency();
 
   async function load() {
     setLoading(true);

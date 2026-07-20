@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
 import { Button, Card, Field, Input, Select, EmptyState, PageSkeleton, StatCard, Badge, ErrorState } from "@/components/ui";
 import { api } from "@/lib/api";
+import { useCurrency } from "@/lib/currency";
 import { formatMoney, formatPercent, toCents } from "@/lib/format";
 import type { Property } from "@/lib/types";
 
@@ -12,7 +13,7 @@ export default function PropertyPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const currency = "ZAR";
+  const currency = useCurrency();
 
   async function load() {
     setLoading(true);
