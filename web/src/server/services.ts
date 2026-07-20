@@ -8,6 +8,7 @@ import {
   budgetLines,
   budgetPeriods,
   categories,
+  goals,
   households,
   householdMembers,
   memberships,
@@ -321,6 +322,42 @@ export async function backfillDueDates(db: DB, householdId: number, actorUserId:
     household_id: householdId, actor_user_id: actorUserId, detail: { synced, seeded, default_due_day: seedDay },
   });
   return { synced, seeded, skipped_locked, total: lines.length };
+}
+
+/**
+ * Remove a household member cleanly: guard the last owner, null out every
+ * owner/responsible reference so nothing is orphaned, drop the member's split
+ * allocations, revoke their login membership, then delete the member row.
+ */
+export async function removeMember(db: DB, householdId: number, memberId: number, actorUserId: number) {
+  const member = (await db.select().from(householdMembers).where(eq(householdMembers.id, memberId))).at(0);
+  if (!member || member.household_id !== householdId) throw new HttpError(404, "Member not found");
+
+  if (member.role === Role.OWNER) {
+    const owners = await db.select().from(householdMembers)
+      .where(and(eq(householdMembers.household_id, householdId), eq(householdMembers.role, Role.OWNER)));
+    if (owners.length <= 1) throw new HttpError(409, "You can't remove the household's only owner.");
+  }
+
+  const inHh = eq(budgetLines.household_id, householdId);
+  await db.update(budgetLines).set({ owner_member_id: null }).where(and(inHh, eq(budgetLines.owner_member_id, memberId)));
+  await db.update(budgetLines).set({ payer_member_id: null }).where(and(inHh, eq(budgetLines.payer_member_id, memberId)));
+  await db.update(budgetLines).set({ beneficiary_member_id: null }).where(and(inHh, eq(budgetLines.beneficiary_member_id, memberId)));
+  await db.update(budgetLines).set({ responsible_member_id: null }).where(and(inHh, eq(budgetLines.responsible_member_id, memberId)));
+  await db.delete(budgetLineAllocations).where(eq(budgetLineAllocations.member_id, memberId));
+  await db.update(accounts).set({ owner_member_id: null }).where(and(eq(accounts.household_id, householdId), eq(accounts.owner_member_id, memberId)));
+  await db.update(categories).set({ default_owner_member_id: null }).where(and(eq(categories.household_id, householdId), eq(categories.default_owner_member_id, memberId)));
+  await db.update(goals).set({ owner_member_id: null }).where(and(eq(goals.household_id, householdId), eq(goals.owner_member_id, memberId)));
+
+  // Revoke login access for this household (keep the user account for others).
+  if (member.user_id) {
+    await db.delete(memberships).where(and(eq(memberships.user_id, member.user_id), eq(memberships.household_id, householdId)));
+  }
+  await db.delete(householdMembers).where(eq(householdMembers.id, memberId));
+  await recordAudit(db, {
+    action: "member.removed", entity_type: "household_member", entity_id: memberId,
+    household_id: householdId, actor_user_id: actorUserId, detail: { name: member.name, had_login: !!member.user_id },
+  });
 }
 
 export async function applyBatch(

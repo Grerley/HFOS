@@ -2,23 +2,83 @@
 import { useEffect, useState } from "react";
 import AppShell, { PageHeader } from "@/components/AppShell";
 import { Button, Card, Field, Input, Select, Badge, PageSkeleton, ErrorState } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, getHouseholdId } from "@/lib/api";
 import { useCurrency } from "@/lib/currency";
 import { formatMoney, toCents } from "@/lib/format";
-import type { Category, Member } from "@/lib/types";
+import type { Category, Household, Member } from "@/lib/types";
 
 interface Account { id: number; name: string; type: string; current_balance_cents: number; }
+
+const CURRENCIES = ["ZAR", "USD", "EUR", "GBP", "AUD", "CAD", "NGN", "KES", "GHS", "INR", "AED", "JPY", "CHF", "CNY", "BWP", "NAD", "ZMW", "MZN"];
+const ROLES = ["owner", "partner", "admin", "advisor", "viewer", "child"];
 
 export default function SettingsPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [household, setHousehold] = useState<Household | null>(null);
+  const [hhForm, setHhForm] = useState({ name: "", base_currency: "ZAR", country: "", budget_cycle_day: 1 });
+  const [hhBusy, setHhBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [inviteResult, setInviteResult] = useState<{ email_sent: boolean; invite_link: string | null } | null>(null);
   const [reminderMsg, setReminderMsg] = useState<string | null>(null);
   const [reminderBusy, setReminderBusy] = useState(false);
   const currency = useCurrency();
+
+  const isAdmin = household?.role === "owner" || household?.role === "admin";
+
+  async function load() {
+    setLoading(true);
+    setError(false);
+    try {
+      const [m, a, c, hhs] = await Promise.all([
+        api.get<Member[]>("/members"),
+        api.get<Account[]>("/accounts"),
+        api.get<Category[]>("/categories"),
+        api.get<Household[]>("/households"),
+      ]);
+      setMembers(m); setAccounts(a); setCategories(c);
+      const activeId = Number(getHouseholdId());
+      const hh = hhs.find((h) => h.id === activeId) ?? hhs[0] ?? null;
+      setHousehold(hh);
+      if (hh) setHhForm({ name: hh.name, base_currency: hh.base_currency, country: hh.country ?? "", budget_cycle_day: hh.budget_cycle_day ?? 1 });
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function saveHousehold(e: React.FormEvent) {
+    e.preventDefault();
+    if (!household) return;
+    setHhBusy(true);
+    try {
+      const currencyChanged = hhForm.base_currency !== household.base_currency;
+      await api.patch(`/households/${household.id}`, hhForm);
+      // Currency is read app-wide from the household; reload so it refreshes everywhere.
+      if (currencyChanged) { window.location.reload(); return; }
+      await load();
+    } catch (err: any) { alert(err.message); }
+    finally { setHhBusy(false); }
+  }
+
+  async function changeRole(m: Member, role: string) {
+    try { await api.patch(`/members/${m.id}`, { role }); await load(); }
+    catch (err: any) { alert(err.message); }
+  }
+  async function removeMember(m: Member) {
+    if (!confirm(`Remove ${m.name}? ${m.user_id ? "Their login access to this household will be revoked. " : ""}This can't be undone.`)) return;
+    try { await api.del(`/members/${m.id}`); await load(); }
+    catch (err: any) { alert(err.message); }
+  }
+  async function removeAccount(a: Account) {
+    if (!confirm(`Remove account "${a.name}"? Its balance history is deleted and any budget lines paying from it are detached.`)) return;
+    try { await api.del(`/accounts/${a.id}`); await load(); }
+    catch (err: any) { alert(err.message); }
+  }
 
   async function testReminder() {
     setReminderBusy(true);
@@ -29,30 +89,9 @@ export default function SettingsPage() {
       else if (r.reason === "nothing_due") setReminderMsg("Nothing overdue or due within 3 days — no email needed right now.");
       else if (r.reason === "email_not_configured") setReminderMsg(`Email isn't configured yet. A live digest would include ${r.overdue_count} overdue and ${r.due_soon_count} due-soon items.`);
       else setReminderMsg(`Not sent (${r.reason ?? "unknown"}).`);
-    } catch (e: any) {
-      setReminderMsg(e.message);
-    } finally {
-      setReminderBusy(false);
-    }
+    } catch (e: any) { setReminderMsg(e.message); }
+    finally { setReminderBusy(false); }
   }
-
-  async function load() {
-    setLoading(true);
-    setError(false);
-    try {
-      const [m, a, c] = await Promise.all([
-        api.get<Member[]>("/members"),
-        api.get<Account[]>("/accounts"),
-        api.get<Category[]>("/categories"),
-      ]);
-      setMembers(m); setAccounts(a); setCategories(c);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }
-  useEffect(() => { load(); }, []);
 
   async function addMember(e: React.FormEvent) {
     e.preventDefault();
@@ -96,33 +135,71 @@ export default function SettingsPage() {
   if (loading) return <AppShell><PageSkeleton /></AppShell>;
   if (error) return (
     <AppShell>
-      <PageHeader title="Settings" description="Manage members, accounts and categories." />
+      <PageHeader title="Settings" description="Manage your household, members and accounts." />
       <ErrorState hint="We couldn't load your settings. Check your connection and try again." onRetry={load} />
     </AppShell>
   );
 
   return (
     <AppShell>
-      <PageHeader title="Settings" description="Manage members, accounts and categories." />
+      <PageHeader title="Settings" description="Manage your household, members and accounts." />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card title="Household" subtitle={isAdmin ? "Name, currency and cycle" : "Admins can edit these"}>
+          <form onSubmit={saveHousehold} className="space-y-3">
+            <Field label="Household name">
+              <Input value={hhForm.name} onChange={(e) => setHhForm({ ...hhForm, name: e.target.value })} disabled={!isAdmin} required />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Base currency">
+                <Select value={hhForm.base_currency} onChange={(e) => setHhForm({ ...hhForm, base_currency: e.target.value })} disabled={!isAdmin}>
+                  {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </Select>
+              </Field>
+              <Field label="Budget cycle day (1–28)">
+                <Input type="number" min={1} max={28} value={hhForm.budget_cycle_day}
+                  onChange={(e) => setHhForm({ ...hhForm, budget_cycle_day: Number(e.target.value) || 1 })} disabled={!isAdmin} />
+              </Field>
+            </div>
+            <Field label="Country">
+              <Input value={hhForm.country} onChange={(e) => setHhForm({ ...hhForm, country: e.target.value })} disabled={!isAdmin} placeholder="e.g. ZA" />
+            </Field>
+            {isAdmin && (
+              <div className="flex items-center gap-3">
+                <Button type="submit" disabled={hhBusy}>{hhBusy ? "Saving…" : "Save household"}</Button>
+                {hhForm.base_currency !== household?.base_currency && (
+                  <span className="text-xs text-ink-muted">Changing currency reloads the app to apply it everywhere.</span>
+                )}
+              </div>
+            )}
+          </form>
+        </Card>
+
         <Card title="Household members">
           <div className="mb-4 space-y-2">
             {members.map((m) => (
-              <div key={m.id} className="flex items-center justify-between rounded-lg bg-muted px-4 py-2">
-                <span className="text-sm">{m.name} <span className="text-xs text-ink-muted">· {m.relationship_label || "member"}</span></span>
-                <div className="flex items-center gap-2">
+              <div key={m.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted px-4 py-2">
+                <span className="min-w-0 truncate text-sm">{m.name} <span className="text-xs text-ink-muted">· {m.relationship_label || "member"}</span></span>
+                <div className="flex shrink-0 items-center gap-2">
                   {!m.user_id && <Badge tone="warning">pending</Badge>}
-                  <Badge>{m.role}</Badge>
+                  {isAdmin ? (
+                    <>
+                      <Select value={m.role} onChange={(e) => changeRole(m, e.target.value)} className="!py-1 text-xs">
+                        {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                      </Select>
+                      <button onClick={() => removeMember(m)} title="Remove member" className="rounded px-1.5 text-ink-muted hover:text-negative">✕</button>
+                    </>
+                  ) : <Badge>{m.role}</Badge>}
                 </div>
               </div>
             ))}
+            {!members.length && <p className="text-sm text-ink-muted">No members yet.</p>}
           </div>
           <form onSubmit={addMember} className="grid grid-cols-3 gap-2">
             <Input name="name" placeholder="Name" required />
             <Input name="rel" placeholder="Relationship" />
             <Select name="role" defaultValue="partner">
-              {["owner", "partner", "viewer", "advisor", "admin", "child"].map((r) => <option key={r} value={r}>{r}</option>)}
+              {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
             </Select>
             <div className="col-span-3"><Button type="submit" variant="ghost">Add member</Button></div>
           </form>
@@ -167,11 +244,15 @@ export default function SettingsPage() {
         <Card title="Accounts">
           <div className="mb-4 space-y-2">
             {accounts.map((a) => (
-              <div key={a.id} className="flex items-center justify-between rounded-lg bg-muted px-4 py-2">
-                <span className="text-sm">{a.name} <span className="text-xs text-ink-muted">· {a.type}</span></span>
-                <span className="tabular text-sm">{formatMoney(a.current_balance_cents, currency)}</span>
+              <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted px-4 py-2">
+                <span className="min-w-0 truncate text-sm">{a.name} <span className="text-xs text-ink-muted">· {a.type}</span></span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="tabular text-sm">{formatMoney(a.current_balance_cents, currency)}</span>
+                  <button onClick={() => removeAccount(a)} title="Remove account" className="rounded px-1.5 text-ink-muted hover:text-negative">✕</button>
+                </div>
               </div>
             ))}
+            {!accounts.length && <p className="text-sm text-ink-muted">No accounts yet.</p>}
           </div>
           <form onSubmit={addAccount} className="grid grid-cols-3 gap-2">
             <Input name="name" placeholder="Account name" required />
@@ -183,7 +264,7 @@ export default function SettingsPage() {
           </form>
         </Card>
 
-        <Card title="Category taxonomy" subtitle="Default sections from the workbook (editable)">
+        <Card title="Category taxonomy" subtitle="Default sections from the workbook">
           <div className="space-y-2">
             {sections.map((s) => (
               <div key={s.id} className="rounded-lg border border-line-soft px-4 py-2">

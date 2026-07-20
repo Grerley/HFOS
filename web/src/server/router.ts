@@ -47,7 +47,7 @@ import {
   requireAuth,
   requireWrite,
 } from "./context";
-import { applyBatch, backfillDueDates, deriveDueDate, duplicatePeriod, loadLinesForCalc, provisionHousehold, recordAudit } from "./services";
+import { applyBatch, backfillDueDates, deriveDueDate, duplicatePeriod, loadLinesForCalc, provisionHousehold, recordAudit, removeMember } from "./services";
 import { generatePeriodInsights, runScenario } from "./insights";
 import { analyzeWorkbook, importWorkbook } from "./import";
 import {
@@ -268,9 +268,46 @@ route("GET", "/households", async (req) => {
   const roleByHh = new Map(rows.map((m) => [m.household_id, m.role]));
   return json(hhRows.map((h) => ({ id: h.id, name: h.name, base_currency: h.base_currency, country: h.country, budget_cycle_day: h.budget_cycle_day, role: roleByHh.get(h.id) })));
 });
+route("PATCH", "/households/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireAdmin(ctx);
+  if (Number(params.id) !== ctx.householdId) throw new HttpError(403, "You can only edit your active household.");
+  const p = await body(req);
+  const allowed: any = {};
+  for (const k of ["name", "base_currency", "country", "budget_cycle_day"]) if (k in p) allowed[k] = p[k];
+  if ("base_currency" in allowed) allowed.base_currency = String(allowed.base_currency).toUpperCase().slice(0, 3);
+  if ("budget_cycle_day" in allowed) allowed.budget_cycle_day = Math.min(Math.max(Number(allowed.budget_cycle_day) || 1, 1), 28);
+  await ctx.db.update(households).set(allowed).where(eq(households.id, ctx.householdId));
+  await recordAudit(ctx.db, { action: "household.updated", entity_type: "household", entity_id: ctx.householdId, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: allowed });
+  const hh = (await ctx.db.select().from(households).where(eq(households.id, ctx.householdId))).at(0)!;
+  return json({ id: hh.id, name: hh.name, base_currency: hh.base_currency, country: hh.country, budget_cycle_day: hh.budget_cycle_day, role: ctx.role });
+});
 route("GET", "/members", async (req) => {
   const ctx = await requireAuth(req);
   return json(await ctx.db.select().from(householdMembers).where(eq(householdMembers.household_id, ctx.householdId)));
+});
+route("PATCH", "/members/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireAdmin(ctx);
+  const m = await getScoped(ctx.db.select().from(householdMembers).where(eq(householdMembers.id, Number(params.id))), ctx.householdId, "Member");
+  const p = await body(req);
+  // Guard: don't demote the last owner.
+  if (p.role && m.role === "owner" && p.role !== "owner") {
+    const owners = await ctx.db.select().from(householdMembers).where(and(eq(householdMembers.household_id, ctx.householdId), eq(householdMembers.role, "owner")));
+    if (owners.length <= 1) throw new HttpError(409, "You can't change the role of the household's only owner.");
+  }
+  const allowed: any = {};
+  for (const k of ["name", "relationship_label", "role"]) if (k in p) allowed[k] = p[k];
+  await ctx.db.update(householdMembers).set(allowed).where(eq(householdMembers.id, m.id));
+  // Keep login access role in sync when the member is a linked user.
+  if (allowed.role && m.user_id) {
+    await ctx.db.update(memberships).set({ role: allowed.role }).where(and(eq(memberships.user_id, m.user_id), eq(memberships.household_id, ctx.householdId)));
+  }
+  await recordAudit(ctx.db, { action: "member.updated", entity_type: "household_member", entity_id: m.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: allowed });
+  return json((await ctx.db.select().from(householdMembers).where(eq(householdMembers.id, m.id))).at(0));
+});
+route("DELETE", "/members/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireAdmin(ctx);
+  await removeMember(ctx.db, ctx.householdId, Number(params.id), ctx.userId);
+  return new Response(null, { status: 204 });
 });
 route("POST", "/members", async (req) => {
   const ctx = await requireAuth(req); requireAdmin(ctx);
@@ -349,6 +386,25 @@ route("POST", "/accounts/:id/balances", async (req, params) => {
   if (!acc.balance_date || p.as_of >= acc.balance_date)
     await ctx.db.update(accounts).set({ current_balance_cents: p.balance_cents, balance_date: p.as_of }).where(eq(accounts.id, acc.id));
   return json((await ctx.db.select().from(accounts).where(eq(accounts.id, acc.id))).at(0));
+});
+route("PATCH", "/accounts/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const acc = await getScoped(ctx.db.select().from(accounts).where(eq(accounts.id, Number(params.id))), ctx.householdId, "Account");
+  const p = await body(req);
+  const allowed: any = {};
+  for (const k of ["name", "type", "institution", "owner_member_id", "currency", "is_active"]) if (k in p) allowed[k] = p[k];
+  await ctx.db.update(accounts).set(allowed).where(eq(accounts.id, acc.id));
+  return json((await ctx.db.select().from(accounts).where(eq(accounts.id, acc.id))).at(0));
+});
+route("DELETE", "/accounts/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const acc = await getScoped(ctx.db.select().from(accounts).where(eq(accounts.id, Number(params.id))), ctx.householdId, "Account");
+  // Detach references so nothing is orphaned, then remove the account + its history.
+  await ctx.db.update(budgetLines).set({ source_account_id: null }).where(and(eq(budgetLines.household_id, ctx.householdId), eq(budgetLines.source_account_id, acc.id)));
+  await ctx.db.delete(accountBalances).where(eq(accountBalances.account_id, acc.id));
+  await ctx.db.delete(accounts).where(eq(accounts.id, acc.id));
+  await recordAudit(ctx.db, { action: "account.removed", entity_type: "account", entity_id: acc.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: { name: acc.name } });
+  return new Response(null, { status: 204 });
 });
 route("GET", "/categories", async (req) => {
   const ctx = await requireAuth(req);
