@@ -20,6 +20,21 @@ export const authAttempts = sqliteTable("auth_attempts", {
   created_at: integer("created_at").default(sql`(unixepoch())`).notNull(),
 });
 
+// Household invitations accepted via an emailed signed link (token hash stored).
+export const invites = sqliteTable("invites", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  household_id: integer("household_id").notNull(),
+  email: text("email").notNull(),
+  name: text("name"),
+  role: text("role").default("partner").notNull(),
+  token_hash: text("token_hash").notNull(),
+  invited_by: integer("invited_by"),
+  member_id: integer("member_id"), // the pending household_members row
+  expires_at: integer("expires_at").notNull(), // unix seconds
+  accepted_at: integer("accepted_at"),
+  created_at: integer("created_at").default(sql`(unixepoch())`).notNull(),
+});
+
 // Single-use, expiring password-reset tokens. Only the SHA-256 hash is stored.
 export const passwordResetTokens = sqliteTable("password_reset_tokens", {
   id: integer("id").primaryKey({ autoIncrement: true }),

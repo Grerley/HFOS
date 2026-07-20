@@ -33,8 +33,9 @@ import {
   normalizeEmail,
   recordAttempt,
 } from "./security";
-import { emailShell, sendEmail } from "./email";
+import { emailConfigured, emailShell, sendEmail } from "./email";
 import { consumeResetToken, createResetToken } from "./passwordReset";
+import { acceptInvite, createInvite, getInviteByToken } from "./invites";
 import { derivePaymentFlags, LOCKED_STATUSES, PeriodStatus } from "../lib/enums";
 import {
   Ctx,
@@ -284,18 +285,43 @@ route("POST", "/members", async (req) => {
 route("POST", "/members/invite", async (req) => {
   const ctx = await requireAuth(req); requireAdmin(ctx);
   const p = await body(req);
-  let u = (await ctx.db.select().from(users).where(eq(users.email, p.email))).at(0);
-  if (!u) {
-    const pwError = validatePassword(p.password ?? "", p.email);
-    if (pwError) throw new HttpError(422, pwError);
-    [u] = await ctx.db.insert(users).values({ name: p.name, email: p.email, password_hash: await hashPassword(p.password) }).returning();
+  const { invite, member, token } = await createInvite(ctx.db, ctx.householdId, ctx.userId, p);
+  const link = `${new URL(req.url).origin}/accept-invite?token=${token}`;
+
+  const hh = (await ctx.db.select().from(households).where(eq(households.id, ctx.householdId))).at(0);
+  const inviter = (await ctx.db.select().from(users).where(eq(users.id, ctx.userId))).at(0);
+  let email_sent = false;
+  if (emailConfigured(getEnv())) {
+    const html = emailShell(
+      `You've been invited to ${hh?.name ?? "a household"} on HFOS`,
+      `<p style="font-size:14px;line-height:1.5;">${inviter?.name ?? "Someone"} invited you to join <strong>${hh?.name ?? "their household"}</strong> on HFOS as ${invite.role}. This link expires in 7 days.</p>
+       <p style="margin:20px 0;"><a href="${link}" style="display:inline-block;background:#16324f;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;">Accept invitation</a></p>
+       <p style="color:#6b7891;font-size:12px;line-height:1.5;">Or paste this into your browser:<br>${link}</p>`,
+    );
+    const r = await sendEmail(getEnv(), { to: invite.email, subject: `Join ${hh?.name ?? "a household"} on HFOS`, html, text: `Accept your HFOS invitation (expires in 7 days): ${link}` });
+    email_sent = r.sent;
   }
-  const existing = await ctx.db.select().from(memberships).where(and(eq(memberships.user_id, u.id), eq(memberships.household_id, ctx.householdId)));
-  if (existing.length) throw new HttpError(409, "User already a member of this household");
-  await ctx.db.insert(memberships).values({ user_id: u.id, household_id: ctx.householdId, role: p.role ?? "partner" });
-  const [m] = await ctx.db.insert(householdMembers).values({ household_id: ctx.householdId, user_id: u.id, name: p.name, role: p.role ?? "partner", relationship_label: "partner" }).returning();
-  await recordAudit(ctx.db, { action: "member.invite", entity_type: "membership", entity_id: m.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: { email: p.email, role: p.role } });
-  return json(m, 201);
+  await recordAudit(ctx.db, { action: "member.invited", entity_type: "invite", entity_id: invite.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: { email: invite.email, role: invite.role, email_sent } });
+  // If email is off, return the link so the admin can share it manually.
+  return json({ member, email_sent, invite_link: email_sent ? null : link }, 201);
+});
+
+// ── Public invite acceptance (no auth) ────────────────────────────────────────
+route("GET", "/invites/:token", async (_req, params) => {
+  const db = getDb(getEnv());
+  const info = await getInviteByToken(db, params.token);
+  if (!info) throw new HttpError(404, "This invite link is invalid.");
+  const { _inv, ...safe } = info;
+  return json(safe);
+});
+route("POST", "/invites/:token/accept", async (req, params) => {
+  const db = getDb(getEnv());
+  const p = await body(req);
+  const { user, created } = await acceptInvite(db, params.token, p);
+  await recordAudit(db, { action: "member.invite_accepted", entity_type: "user", entity_id: user.id, actor_user_id: user.id, detail: { created } });
+  // New accounts are auto-signed-in; existing accounts must sign in themselves.
+  if (created) return tokenResponse(db, user);
+  return json({ ok: true, created: false, message: "You've been added to the household. Please sign in." });
 });
 
 // ── Accounts & categories ─────────────────────────────────────────────────────
