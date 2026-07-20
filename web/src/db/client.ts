@@ -15,6 +15,9 @@ export interface Env {
   // disabled until RESEND_API_KEY is set. EMAIL_FROM is a non-secret [vars] value.
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  // Shared secret authorizing the scheduled reminders endpoint. Reminders are
+  // disabled until this is set.
+  CRON_SECRET?: string;
 }
 
 export type DB = DrizzleD1Database<typeof schema>;

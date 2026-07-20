@@ -36,6 +36,7 @@ import {
 import { emailConfigured, emailShell, sendEmail } from "./email";
 import { consumeResetToken, createResetToken } from "./passwordReset";
 import { acceptInvite, createInvite, getInviteByToken } from "./invites";
+import { sendDueReminders, sendReminderForHousehold } from "./reminders";
 import { derivePaymentFlags, LOCKED_STATUSES, PeriodStatus } from "../lib/enums";
 import {
   Ctx,
@@ -720,6 +721,24 @@ route("POST", "/budget-lines/:id/comments", async (req, params) => {
   }).returning();
   await recordAudit(ctx.db, { action: "comment.added", entity_type: "budget_line", entity_id: line.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: { comment_id: c.id } });
   return json(c, 201);
+});
+
+// ── Payment reminders ─────────────────────────────────────────────────────────
+// Scheduled entry point (called by the reminders GitHub Actions workflow).
+route("POST", "/cron/send-reminders", async (req) => {
+  const env = getEnv();
+  const secret = (env as any).CRON_SECRET as string | undefined;
+  if (!secret) throw new HttpError(503, "Reminders are not configured.");
+  if ((req.headers.get("authorization") || "") !== `Bearer ${secret}`) throw new HttpError(401, "Unauthorized");
+  const days = Number(qp(req, "due_soon_days")) || 3;
+  return json(await sendDueReminders(env, getDb(env), days));
+});
+// Admin on-demand: send this household's digest to the calling admin (for testing).
+route("POST", "/reminders/send-now", async (req) => {
+  const ctx = await requireAuth(req); requireAdmin(ctx);
+  const me = (await ctx.db.select().from(users).where(eq(users.id, ctx.userId))).at(0)!;
+  const result = await sendReminderForHousehold(getEnv(), ctx.db, ctx.householdId, [{ email: me.email }]);
+  return json(result);
 });
 
 // ── Health ────────────────────────────────────────────────────────────────────

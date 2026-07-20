@@ -1,0 +1,41 @@
+name: Payment reminders
+
+# Sends each household a daily digest of overdue + soon-due payments by calling
+# the secured reminders endpoint on the Worker. Runs only when CRON_SECRET is set
+# (the endpoint returns 503 otherwise, and this job exits cleanly).
+#
+# Required GitHub repository secrets:
+#   CRON_SECRET  — any long random string; must match the value synced to the Worker.
+# Optional repository variable:
+#   APP_URL      — the deployed app origin (defaults to the production Worker URL).
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # 06:00 UTC daily
+  workflow_dispatch: # allow manual runs from the Actions tab
+
+concurrency:
+  group: payment-reminders
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger reminder digests
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL || 'https://hfos.geemutibura.workers.dev' }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET not set — skipping (reminders disabled)."
+            exit 0
+          fi
+          echo "Calling reminders endpoint at $APP_URL"
+          code=$(curl -s -o /tmp/resp.json -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/send-reminders")
+          echo "HTTP $code"; cat /tmp/resp.json || true; echo
+          # 503 = reminders not configured on the Worker yet; treat as a no-op.
+          if [ "$code" = "503" ]; then echo "Worker reports reminders disabled."; exit 0; fi
+          if [ "$code" != "200" ]; then echo "Reminder call failed"; exit 1; fi

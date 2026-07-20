@@ -79,3 +79,13 @@ jobs:
           fi
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Sync cron secret for reminders (if set)
+        run: |
+          if [ -n "$CRON_SECRET" ]; then
+            printf '%s' "$CRON_SECRET" | npx wrangler secret put CRON_SECRET
+          else
+            echo "CRON_SECRET not set — payment reminders stay disabled."
+          fi
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

@@ -16,7 +16,25 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [inviteResult, setInviteResult] = useState<{ email_sent: boolean; invite_link: string | null } | null>(null);
+  const [reminderMsg, setReminderMsg] = useState<string | null>(null);
+  const [reminderBusy, setReminderBusy] = useState(false);
   const currency = useCurrency();
+
+  async function testReminder() {
+    setReminderBusy(true);
+    setReminderMsg(null);
+    try {
+      const r = await api.post<any>("/reminders/send-now", {});
+      if (r.sent) setReminderMsg(`Sent to your inbox — ${r.overdue_count} overdue, ${r.due_soon_count} due soon.`);
+      else if (r.reason === "nothing_due") setReminderMsg("Nothing overdue or due within 3 days — no email needed right now.");
+      else if (r.reason === "email_not_configured") setReminderMsg(`Email isn't configured yet. A live digest would include ${r.overdue_count} overdue and ${r.due_soon_count} due-soon items.`);
+      else setReminderMsg(`Not sent (${r.reason ?? "unknown"}).`);
+    } catch (e: any) {
+      setReminderMsg(e.message);
+    } finally {
+      setReminderBusy(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -134,6 +152,16 @@ export default function SettingsPage() {
           ) : (
             <p className="mt-2 text-xs text-ink-muted">Sends a secure link; the invitee sets their own password. If email isn't configured, you'll get a link to share.</p>
           )}
+        </Card>
+
+        <Card title="Payment reminders" subtitle="Daily digest of overdue & soon-due payments">
+          <p className="mb-3 text-sm text-ink-soft">
+            Household admins get a daily email when payments are overdue or due within 3 days. Send yourself one now to preview it.
+          </p>
+          <Button variant="ghost" onClick={testReminder} disabled={reminderBusy}>
+            {reminderBusy ? "Sending…" : "Send me a test reminder"}
+          </Button>
+          {reminderMsg && <p className="mt-2 text-xs text-ink-muted">{reminderMsg}</p>}
         </Card>
 
         <Card title="Accounts">
