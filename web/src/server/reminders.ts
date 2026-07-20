@@ -134,7 +134,16 @@ async function deliver(env: Env, digest: HouseholdDigest, targets: DeliveryTarge
       if (r.sent) emails_sent += 1;
     }
     if (t.wantWhatsApp && t.phone && waOn) {
-      const r = await sendWhatsApp(env, t.phone, text);
+      // Structured params for the approved Meta template (see docs/WHATSAPP_TEMPLATE.md):
+      // {{1}} name, {{2}} household, {{3}} total, {{4}} overdue count, {{5}} due-soon count.
+      const params = [
+        t.name || "there",
+        digest.household_name,
+        money(digest.total_outstanding_cents, digest.currency),
+        String(digest.overdue.length),
+        String(digest.due_soon.length),
+      ];
+      const r = await sendWhatsApp(env, t.phone, { text, params });
       if (r.sent) whatsapp_sent += 1;
     }
   }
@@ -179,6 +188,7 @@ export async function sendReminderToUser(env: Env, db: DB, householdId: number, 
   const user = (await db.select().from(users).where(eq(users.id, userId))).at(0);
   const member = (await db.select().from(householdMembers).where(and(eq(householdMembers.household_id, householdId), eq(householdMembers.user_id, userId)))).at(0);
   const target: DeliveryTarget = {
+    name: member?.name ?? user?.name ?? null,
     email: user?.email ?? null,
     phone: member?.phone ?? null,
     wantEmail: true, // a test always tries email so the admin gets it
