@@ -4,11 +4,12 @@
  * Triggered by a scheduled GitHub Actions workflow hitting /api/cron/send-reminders
  * (secured by CRON_SECRET), or on-demand by an admin via /api/reminders/send-now.
  */
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type { DB, Env } from "../db/client";
-import { budgetPeriods, households, memberships, users } from "../db/schema";
+import { budgetPeriods, households, householdMembers, users } from "../db/schema";
 import { WRITE_ROLES } from "../lib/enums";
 import { emailConfigured, emailShell, sendEmail } from "./email";
+import { sendWhatsApp, whatsappConfigured } from "./notify";
 import { periodSettlement, todayISO } from "./payments";
 
 const DEFAULT_DUE_SOON_DAYS = 3;
@@ -100,36 +101,91 @@ function digestHtml(d: HouseholdDigest): string {
   );
 }
 
-async function recipientsForHousehold(db: DB, householdId: number) {
-  const mems = await db.select().from(memberships).where(eq(memberships.household_id, householdId));
-  const ids = mems.filter((m) => WRITE_ROLES.has(m.role)).map((m) => m.user_id);
-  if (!ids.length) return [];
-  return db.select().from(users).where(inArray(users.id, ids));
+/** Concise plain-text digest for WhatsApp/SMS-style channels. */
+function digestText(d: HouseholdDigest): string {
+  const line = (l: DigestLine) => `${l.item_name} ${money(l.outstanding_cents, d.currency)}${l.due_date ? ` (due ${l.due_date})` : ""}`;
+  const parts = [`HFOS · ${d.household_name}: ${money(d.total_outstanding_cents, d.currency)} outstanding.`];
+  if (d.overdue.length) parts.push(`Overdue (${d.overdue.length}): ${d.overdue.map(line).join("; ")}`);
+  if (d.due_soon.length) parts.push(`Due soon (${d.due_soon.length}): ${d.due_soon.map(line).join("; ")}`);
+  parts.push("Open HFOS → Payments to settle these.");
+  return parts.join("\n");
 }
 
-/** Send one household's digest to the given recipients (or its managing members). */
-export async function sendReminderForHousehold(
-  env: Env,
-  db: DB,
-  householdId: number,
-  recipients?: { email: string }[],
-  dueSoonDays = DEFAULT_DUE_SOON_DAYS,
-) {
-  const digest = await buildHouseholdDigest(db, householdId, dueSoonDays);
-  if (!digest) return { sent: false, reason: "nothing_due" as const, overdue_count: 0, due_soon_count: 0 };
-  const to = recipients ?? (await recipientsForHousehold(db, householdId));
-  const counts = { overdue_count: digest.overdue.length, due_soon_count: digest.due_soon.length };
-  if (!emailConfigured(env)) return { sent: false, reason: "email_not_configured" as const, ...counts };
-  if (!to.length) return { sent: false, reason: "no_recipients" as const, ...counts };
+interface DeliveryTarget {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  wantEmail: boolean;
+  wantWhatsApp: boolean;
+}
 
+/** Deliver a digest to targets over each opted-in, configured channel. */
+async function deliver(env: Env, digest: HouseholdDigest, targets: DeliveryTarget[]) {
   const html = digestHtml(digest);
+  const text = digestText(digest);
   const subject = `${digest.overdue.length ? "⚠ Overdue & " : ""}Payments due — ${digest.household_name}`;
-  let sent = 0;
-  for (const r of to) {
-    const res = await sendEmail(env, { to: r.email, subject, html, text: `You have ${digest.overdue.length} overdue and ${digest.due_soon.length} soon-due payments (${money(digest.total_outstanding_cents, digest.currency)} outstanding). Open HFOS → Payments.` });
-    if (res.sent) sent += 1;
+  const emailOn = emailConfigured(env);
+  const waOn = whatsappConfigured(env);
+  let emails_sent = 0;
+  let whatsapp_sent = 0;
+  for (const t of targets) {
+    if (t.wantEmail && t.email && emailOn) {
+      const r = await sendEmail(env, { to: t.email, subject, html, text });
+      if (r.sent) emails_sent += 1;
+    }
+    if (t.wantWhatsApp && t.phone && waOn) {
+      const r = await sendWhatsApp(env, t.phone, text);
+      if (r.sent) whatsapp_sent += 1;
+    }
   }
-  return { sent: sent > 0, emails_sent: sent, ...counts };
+  return { emails_sent, whatsapp_sent };
+}
+
+/** Managing members (owner/partner/admin) as delivery targets, per their channel prefs. */
+async function managingTargets(db: DB, householdId: number): Promise<DeliveryTarget[]> {
+  const members = (await db.select().from(householdMembers).where(eq(householdMembers.household_id, householdId)))
+    .filter((m) => m.is_active && WRITE_ROLES.has(m.role));
+  const userIds = members.map((m) => m.user_id).filter((x): x is number => x != null);
+  const emailByUser = new Map<number, string>();
+  if (userIds.length) {
+    for (const u of await db.select().from(users).where(inArray(users.id, userIds))) emailByUser.set(u.id, u.email);
+  }
+  return members.map((m) => ({
+    name: m.name,
+    email: m.user_id ? emailByUser.get(m.user_id) ?? null : null,
+    phone: m.phone,
+    wantEmail: m.notify_email,
+    wantWhatsApp: m.notify_whatsapp,
+  }));
+}
+
+export async function sendReminderForHousehold(env: Env, db: DB, householdId: number, dueSoonDays = DEFAULT_DUE_SOON_DAYS) {
+  const digest = await buildHouseholdDigest(db, householdId, dueSoonDays);
+  const counts = { overdue_count: digest?.overdue.length ?? 0, due_soon_count: digest?.due_soon.length ?? 0 };
+  if (!digest) return { sent: false, reason: "nothing_due" as const, ...counts };
+  if (!emailConfigured(env) && !whatsappConfigured(env)) return { sent: false, reason: "not_configured" as const, ...counts };
+  const targets = await managingTargets(db, householdId);
+  if (!targets.length) return { sent: false, reason: "no_recipients" as const, ...counts };
+  const { emails_sent, whatsapp_sent } = await deliver(env, digest, targets);
+  return { sent: emails_sent + whatsapp_sent > 0, emails_sent, whatsapp_sent, ...counts };
+}
+
+/** Admin "send me a test" — delivers this household's digest to the calling user's own channels. */
+export async function sendReminderToUser(env: Env, db: DB, householdId: number, userId: number, dueSoonDays = DEFAULT_DUE_SOON_DAYS) {
+  const digest = await buildHouseholdDigest(db, householdId, dueSoonDays);
+  const counts = { overdue_count: digest?.overdue.length ?? 0, due_soon_count: digest?.due_soon.length ?? 0 };
+  if (!digest) return { sent: false, reason: "nothing_due" as const, ...counts };
+  if (!emailConfigured(env) && !whatsappConfigured(env)) return { sent: false, reason: "not_configured" as const, ...counts };
+  const user = (await db.select().from(users).where(eq(users.id, userId))).at(0);
+  const member = (await db.select().from(householdMembers).where(and(eq(householdMembers.household_id, householdId), eq(householdMembers.user_id, userId)))).at(0);
+  const target: DeliveryTarget = {
+    email: user?.email ?? null,
+    phone: member?.phone ?? null,
+    wantEmail: true, // a test always tries email so the admin gets it
+    wantWhatsApp: !!(member?.notify_whatsapp && member?.phone),
+  };
+  const { emails_sent, whatsapp_sent } = await deliver(env, digest, [target]);
+  return { sent: emails_sent + whatsapp_sent > 0, emails_sent, whatsapp_sent, ...counts };
 }
 
 /** Cron entry point: send digests for every household that has something due. */
@@ -137,9 +193,10 @@ export async function sendDueReminders(env: Env, db: DB, dueSoonDays = DEFAULT_D
   const hhs = await db.select().from(households);
   let households_notified = 0;
   let emails_sent = 0;
+  let whatsapp_sent = 0;
   for (const hh of hhs) {
-    const r = await sendReminderForHousehold(env, db, hh.id, undefined, dueSoonDays);
-    if (r.sent) { households_notified += 1; emails_sent += (r as any).emails_sent ?? 0; }
+    const r = await sendReminderForHousehold(env, db, hh.id, dueSoonDays);
+    if (r.sent) { households_notified += 1; emails_sent += (r as any).emails_sent ?? 0; whatsapp_sent += (r as any).whatsapp_sent ?? 0; }
   }
-  return { households_scanned: hhs.length, households_notified, emails_sent };
+  return { households_scanned: hhs.length, households_notified, emails_sent, whatsapp_sent };
 }

@@ -36,7 +36,7 @@ import {
 import { emailConfigured, emailShell, sendEmail } from "./email";
 import { consumeResetToken, createResetToken } from "./passwordReset";
 import { acceptInvite, createInvite, getInviteByToken } from "./invites";
-import { sendDueReminders, sendReminderForHousehold } from "./reminders";
+import { sendDueReminders, sendReminderToUser } from "./reminders";
 import { derivePaymentFlags, LOCKED_STATUSES, PeriodStatus } from "../lib/enums";
 import {
   Ctx,
@@ -295,7 +295,7 @@ route("PATCH", "/members/:id", async (req, params) => {
     if (owners.length <= 1) throw new HttpError(409, "You can't change the role of the household's only owner.");
   }
   const allowed: any = {};
-  for (const k of ["name", "relationship_label", "role"]) if (k in p) allowed[k] = p[k];
+  for (const k of ["name", "relationship_label", "role", "phone", "notify_email", "notify_whatsapp"]) if (k in p) allowed[k] = p[k];
   await ctx.db.update(householdMembers).set(allowed).where(eq(householdMembers.id, m.id));
   // Keep login access role in sync when the member is a linked user.
   if (allowed.role && m.user_id) {
@@ -793,9 +793,7 @@ route("POST", "/cron/send-reminders", async (req) => {
 // Admin on-demand: send this household's digest to the calling admin (for testing).
 route("POST", "/reminders/send-now", async (req) => {
   const ctx = await requireAuth(req); requireAdmin(ctx);
-  const me = (await ctx.db.select().from(users).where(eq(users.id, ctx.userId))).at(0)!;
-  const result = await sendReminderForHousehold(getEnv(), ctx.db, ctx.householdId, [{ email: me.email }]);
-  return json(result);
+  return json(await sendReminderToUser(getEnv(), ctx.db, ctx.householdId, ctx.userId));
 });
 
 // ── Health ────────────────────────────────────────────────────────────────────

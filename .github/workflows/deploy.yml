@@ -89,3 +89,19 @@ jobs:
           fi
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+      - name: Sync WhatsApp secrets (if set)
+        env:
+          WHATSAPP_PROVIDER: ${{ secrets.WHATSAPP_PROVIDER }}
+          WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
+          WHATSAPP_PHONE_ID: ${{ secrets.WHATSAPP_PHONE_ID }}
+          WHATSAPP_TEMPLATE: ${{ secrets.WHATSAPP_TEMPLATE }}
+          WHATSAPP_TEMPLATE_LANG: ${{ secrets.WHATSAPP_TEMPLATE_LANG }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_WHATSAPP_FROM: ${{ secrets.TWILIO_WHATSAPP_FROM }}
+        run: |
+          for name in WHATSAPP_PROVIDER WHATSAPP_TOKEN WHATSAPP_PHONE_ID WHATSAPP_TEMPLATE WHATSAPP_TEMPLATE_LANG TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_WHATSAPP_FROM; do
+            val="${!name}"
+            if [ -n "$val" ]; then printf '%s' "$val" | npx wrangler secret put "$name"; else echo "$name not set — skipping"; fi
+          done

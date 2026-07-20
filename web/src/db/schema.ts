@@ -74,6 +74,10 @@ export const householdMembers = sqliteTable("household_members", {
   name: text("name").notNull(),
   relationship_label: text("relationship_label"),
   role: text("role").default("partner").notNull(),
+  // Notification preferences (per person). phone is E.164 for WhatsApp.
+  phone: text("phone"),
+  notify_email: integer("notify_email", { mode: "boolean" }).default(true).notNull(),
+  notify_whatsapp: integer("notify_whatsapp", { mode: "boolean" }).default(false).notNull(),
   is_active: integer("is_active", { mode: "boolean" }).default(true).notNull(),
   created_at: ts(),
   updated_at: tsu(),

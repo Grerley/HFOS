@@ -18,6 +18,15 @@ export interface Env {
   // Shared secret authorizing the scheduled reminders endpoint. Reminders are
   // disabled until this is set.
   CRON_SECRET?: string;
+  // WhatsApp notifications (optional; disabled until a provider is configured).
+  WHATSAPP_PROVIDER?: string; // "meta" | "twilio"
+  WHATSAPP_TOKEN?: string;
+  WHATSAPP_PHONE_ID?: string;
+  WHATSAPP_TEMPLATE?: string;
+  WHATSAPP_TEMPLATE_LANG?: string;
+  TWILIO_ACCOUNT_SID?: string;
+  TWILIO_AUTH_TOKEN?: string;
+  TWILIO_WHATSAPP_FROM?: string;
 }
 
 export type DB = DrizzleD1Database<typeof schema>;

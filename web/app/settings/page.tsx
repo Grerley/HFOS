@@ -69,6 +69,10 @@ export default function SettingsPage() {
     try { await api.patch(`/members/${m.id}`, { role }); await load(); }
     catch (err: any) { alert(err.message); }
   }
+  async function updateMember(m: Member, patch: Partial<Member>) {
+    try { await api.patch(`/members/${m.id}`, patch); await load(); }
+    catch (err: any) { alert(err.message); }
+  }
   async function removeMember(m: Member) {
     if (!confirm(`Remove ${m.name}? ${m.user_id ? "Their login access to this household will be revoked. " : ""}This can't be undone.`)) return;
     try { await api.del(`/members/${m.id}`); await load(); }
@@ -85,9 +89,11 @@ export default function SettingsPage() {
     setReminderMsg(null);
     try {
       const r = await api.post<any>("/reminders/send-now", {});
-      if (r.sent) setReminderMsg(`Sent to your inbox — ${r.overdue_count} overdue, ${r.due_soon_count} due soon.`);
-      else if (r.reason === "nothing_due") setReminderMsg("Nothing overdue or due within 3 days — no email needed right now.");
-      else if (r.reason === "email_not_configured") setReminderMsg(`Email isn't configured yet. A live digest would include ${r.overdue_count} overdue and ${r.due_soon_count} due-soon items.`);
+      if (r.sent) {
+        const via = [r.emails_sent ? "email" : null, r.whatsapp_sent ? "WhatsApp" : null].filter(Boolean).join(" + ");
+        setReminderMsg(`Sent via ${via} — ${r.overdue_count} overdue, ${r.due_soon_count} due soon.`);
+      } else if (r.reason === "nothing_due") setReminderMsg("Nothing overdue or due within 3 days — no reminder needed right now.");
+      else if (r.reason === "not_configured") setReminderMsg(`No channel is configured yet. A live digest would include ${r.overdue_count} overdue and ${r.due_soon_count} due-soon items.`);
       else setReminderMsg(`Not sent (${r.reason ?? "unknown"}).`);
     } catch (e: any) { setReminderMsg(e.message); }
     finally { setReminderBusy(false); }
@@ -177,22 +183,40 @@ export default function SettingsPage() {
 
         <Card title="Household members">
           <div className="mb-4 space-y-2">
-            {members.map((m) => (
-              <div key={m.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted px-4 py-2">
-                <span className="min-w-0 truncate text-sm">{m.name} <span className="text-xs text-ink-muted">· {m.relationship_label || "member"}</span></span>
-                <div className="flex shrink-0 items-center gap-2">
-                  {!m.user_id && <Badge tone="warning">pending</Badge>}
-                  {isAdmin ? (
-                    <>
-                      <Select value={m.role} onChange={(e) => changeRole(m, e.target.value)} className="!py-1 text-xs">
-                        {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                      </Select>
-                      <button onClick={() => removeMember(m)} title="Remove member" className="rounded px-1.5 text-ink-muted hover:text-negative">✕</button>
-                    </>
-                  ) : <Badge>{m.role}</Badge>}
+            {members.map((m) => {
+              const managing = ["owner", "partner", "admin"].includes(m.role);
+              return (
+                <div key={m.id} className="rounded-lg bg-muted px-4 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-sm">{m.name} <span className="text-xs text-ink-muted">· {m.relationship_label || "member"}</span></span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {!m.user_id && <Badge tone="warning">pending</Badge>}
+                      {isAdmin ? (
+                        <>
+                          <Select value={m.role} onChange={(e) => changeRole(m, e.target.value)} className="!py-1 text-xs">
+                            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                          </Select>
+                          <button onClick={() => removeMember(m)} title="Remove member" className="rounded px-1.5 text-ink-muted hover:text-negative">✕</button>
+                        </>
+                      ) : <Badge>{m.role}</Badge>}
+                    </div>
+                  </div>
+                  {isAdmin && managing && (
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line-soft pt-2 text-xs text-ink-soft">
+                      <span className="font-medium text-ink-muted">Reminders:</span>
+                      <label className="flex items-center gap-1"><input type="checkbox" checked={m.notify_email ?? true} onChange={(e) => updateMember(m, { notify_email: e.target.checked })} /> Email</label>
+                      <label className="flex items-center gap-1"><input type="checkbox" checked={m.notify_whatsapp ?? false} onChange={(e) => updateMember(m, { notify_whatsapp: e.target.checked })} /> WhatsApp</label>
+                      <input
+                        type="tel" defaultValue={m.phone ?? ""} placeholder="+27 82 000 0000"
+                        onBlur={(e) => { const v = e.target.value.trim(); if (v !== (m.phone ?? "")) updateMember(m, { phone: v || null }); }}
+                        className="w-40 rounded border border-line bg-card px-2 py-1 text-xs outline-none focus:border-brand"
+                        title="WhatsApp number in international format (E.164), e.g. +27820000000"
+                      />
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {!members.length && <p className="text-sm text-ink-muted">No members yet.</p>}
           </div>
           <form onSubmit={addMember} className="grid grid-cols-3 gap-2">
@@ -233,7 +257,8 @@ export default function SettingsPage() {
 
         <Card title="Payment reminders" subtitle="Daily digest of overdue & soon-due payments">
           <p className="mb-3 text-sm text-ink-soft">
-            Household admins get a daily email when payments are overdue or due within 3 days. Send yourself one now to preview it.
+            Managing members get a daily digest when payments are overdue or due within 3 days, over their chosen channels
+            (Email now; WhatsApp once configured — set each person's channels and number above). Send yourself one now to preview it.
           </p>
           <Button variant="ghost" onClick={testReminder} disabled={reminderBusy}>
             {reminderBusy ? "Sending…" : "Send me a test reminder"}

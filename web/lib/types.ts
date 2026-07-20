@@ -29,6 +29,9 @@ export interface Member {
   role: string;
   user_id?: number | null;
   is_active: boolean;
+  phone?: string | null;
+  notify_email?: boolean;
+  notify_whatsapp?: boolean;
 }
 
 export interface Category {
