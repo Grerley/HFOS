@@ -148,6 +148,10 @@ export interface Property {
   market_value_cents: number;
   outstanding_bond_cents: number;
   rental_status: string;
+  address_label?: string | null;
+  ownership_share_bp?: number;
+  valuation_date?: string | null;
+  notes?: string | null;
 }
 
 export interface Scenario {

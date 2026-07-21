@@ -573,6 +573,25 @@ route("POST", "/properties", async (req) => {
   }).returning();
   return json(prop, 201);
 });
+route("PATCH", "/properties/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const prop = await getScoped(ctx.db.select().from(properties).where(eq(properties.id, Number(params.id))), ctx.householdId, "Property");
+  const p = await body(req);
+  const allowed: any = {};
+  for (const k of ["name", "address_label", "ownership_share_bp", "market_value_cents", "valuation_date", "outstanding_bond_cents", "bond_account_id", "rental_status", "notes"])
+    if (k in p) allowed[k] = p[k];
+  await ctx.db.update(properties).set(allowed).where(eq(properties.id, prop.id));
+  await recordAudit(ctx.db, { action: "property.updated", entity_type: "property", entity_id: prop.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: allowed });
+  return json((await ctx.db.select().from(properties).where(eq(properties.id, prop.id))).at(0));
+});
+route("DELETE", "/properties/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const prop = await getScoped(ctx.db.select().from(properties).where(eq(properties.id, Number(params.id))), ctx.householdId, "Property");
+  await ctx.db.delete(propertyCashFlows).where(eq(propertyCashFlows.property_id, prop.id));
+  await ctx.db.delete(properties).where(eq(properties.id, prop.id));
+  await recordAudit(ctx.db, { action: "property.removed", entity_type: "property", entity_id: prop.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: { name: prop.name } });
+  return new Response(null, { status: 204 });
+});
 route("POST", "/properties/:id/cash-flows", async (req, params) => {
   const ctx = await requireAuth(req); requireWrite(ctx);
   await getScoped(ctx.db.select().from(properties).where(eq(properties.id, Number(params.id))), ctx.householdId, "Property");
@@ -591,16 +610,35 @@ route("GET", "/properties/:id/cash-flow", async (req, params) => {
 route("GET", "/properties-summary", async (req) => {
   const ctx = await requireAuth(req);
   const props = await ctx.db.select().from(properties).where(eq(properties.household_id, ctx.householdId));
-  let total = 0;
   const per: any[] = [];
+  let total_market = 0, total_bond = 0, total_surplus = 0, rented = 0;
   for (const prop of props) {
     const latest = (await ctx.db.select().from(propertyCashFlows).where(eq(propertyCashFlows.property_id, prop.id)).orderBy(desc(propertyCashFlows.id)).limit(1)).at(0);
-    if (!latest) continue;
-    const flow = calc.propertyCashFlow(latest);
-    total += flow.surplus_shortfall_cents;
-    per.push({ property_id: prop.id, name: prop.name, ...flow });
+    const m = latest
+      ? calc.propertyMetrics(latest, prop.market_value_cents, prop.outstanding_bond_cents)
+      : { surplus_shortfall_cents: 0, is_shortfall: false, gross_yield: 0, net_yield: 0, loan_to_value: calc.loanToValue(prop.outstanding_bond_cents, prop.market_value_cents), equity_cents: prop.market_value_cents - prop.outstanding_bond_cents };
+    total_market += prop.market_value_cents;
+    total_bond += prop.outstanding_bond_cents;
+    total_surplus += m.surplus_shortfall_cents;
+    if (prop.rental_status === "rented") rented += 1;
+    per.push({
+      property_id: prop.id, name: prop.name, rental_status: prop.rental_status,
+      market_value_cents: prop.market_value_cents, outstanding_bond_cents: prop.outstanding_bond_cents,
+      equity_cents: m.equity_cents, loan_to_value: m.loan_to_value,
+      monthly_surplus_cents: m.surplus_shortfall_cents, gross_yield: m.gross_yield, net_yield: m.net_yield,
+      has_cash_flow: !!latest,
+    });
   }
-  return json({ total_monthly_surplus_cents: total, properties: per });
+  return json({
+    property_count: props.length,
+    rented_count: rented,
+    total_market_value_cents: total_market,
+    total_bond_cents: total_bond,
+    total_equity_cents: total_market - total_bond,
+    total_monthly_surplus_cents: total_surplus,
+    overall_ltv: calc.loanToValue(total_bond, total_market),
+    properties: per,
+  });
 });
 
 // ── Goals ───────────────────────────────────────────────────────────────────
