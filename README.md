@@ -25,11 +25,15 @@ Cloudflare Worker (OpenNext)
 └── D1            hfos-db (integer-cents money, JSON columns, time-travel restore)
 ```
 
-**Copilot** phrases answers with an LLM (Cloudflare **Workers AI** by default — no
-secret to manage) but every figure it quotes is computed by the deterministic engine
-and handed to the model as grounded facts; the model never does arithmetic. Set
-`HFOS_COPILOT_PROVIDER=anthropic` with an `ANTHROPIC_API_KEY` secret for Claude, or
-`rules` to disable the LLM. Any model failure degrades gracefully to the rule engine.
+**Copilot** phrases answers with an LLM but every figure it quotes is computed by the
+deterministic engine and handed to the model as grounded facts; the model never does
+arithmetic. By default (`HFOS_COPILOT_PROVIDER=auto`) it is **cost-first**: the free
+native **Workers AI** model handles every request and spills over to **Claude** (via
+Cloudflare **AI Gateway**, no secret to manage) only once the daily free-tier
+allowance is spent. Other modes: `ai-gateway` (Claude first), `anthropic` (direct
+API, needs `ANTHROPIC_API_KEY`), `workers-ai` (native only), or `rules` (no LLM).
+Every chain ends at the deterministic rule engine, so a spent free tier, unloaded
+credits, or an outage never breaks the copilot.
 
 **Offline / PWA** — a service worker caches the app shell (network-first, cached-shell
 fallback) and `GET /api` responses per household, so views render with last-synced data

@@ -26,19 +26,20 @@ binding = "AI"
 # or in the dashboard → Worker → Settings → Variables (encrypted).
 #
 # HFOS_COPILOT_PROVIDER selects how the copilot phrases answers:
-#   "workers-ai"  native open model on Cloudflare's GPUs — free-tier, no key (default)
-#   "ai-gateway"  Claude via Cloudflare AI Gateway + Unified Billing — no key, billed
-#                 to Cloudflare credits. Requires an AI Gateway + loaded credits.
-#   "anthropic"   direct Anthropic API — set the ANTHROPIC_API_KEY secret
-#   "rules"       deterministic, no LLM
-# Any remote provider degrades to the native model, then the rule engine, on failure.
+#   "auto"        cost-first (default) — free native Workers AI on every request,
+#                 spilling over to Claude (AI Gateway) only when the native call
+#                 fails, e.g. the daily free-tier allowance is spent. Then rules.
+#   "ai-gateway"  Claude first, degrading to the native model, then rules.
+#   "anthropic"   direct Anthropic API first — set the ANTHROPIC_API_KEY secret.
+#   "workers-ai"  native model only, then rules.
+#   "rules"       deterministic, no LLM.
+# Every chain ends at the deterministic rule engine, so it never hard-fails.
 #
-# To switch the copilot to Claude once AI-Gateway credits are loaded, set:
-#   HFOS_COPILOT_PROVIDER = "ai-gateway"
-#   HFOS_AI_GATEWAY_ID    = "<your gateway name>"   # optional; defaults to "default"
-#   HFOS_COPILOT_MODEL    = "anthropic/claude-sonnet-4.5"  # optional; provider default
+# HFOS_AI_GATEWAY_ID: AI Gateway name for the Claude tier (defaults to "default").
+# HFOS_COPILOT_MODEL: override the Claude-tier model (default anthropic/claude-sonnet-4.5);
+#   bump it as Cloudflare's catalog lists newer Claude models.
 [vars]
-HFOS_COPILOT_PROVIDER = "ai-gateway"
+HFOS_COPILOT_PROVIDER = "auto"
 HFOS_AI_GATEWAY_ID = "hfos"
 # Transactional email sender. Resend's onboarding domain works out of the box but
 # only delivers to your own account email — replace with a verified domain address

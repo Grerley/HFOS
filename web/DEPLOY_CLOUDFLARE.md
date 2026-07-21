@@ -82,16 +82,25 @@ npm test                  # vitest: calc engine + query/import unit tests
 The copilot phrases answers with an LLM; every number still comes from the calc
 engine. The provider is chosen by `HFOS_COPILOT_PROVIDER` (in `wrangler.toml`):
 
-- **`workers-ai`** (default) — a native open model on Cloudflare's GPUs. Free tier
-  (10,000 Neurons/day, ~hundreds of copilot answers), no key, data stays in-region.
-- **`ai-gateway`** — **Claude** via Cloudflare AI Gateway. No API key: third-party
-  models bill through **Unified Billing** (Cloudflare credits). Best phrasing quality.
+- **`auto`** (default) — **cost-first.** The free native Workers AI model
+  (10,000 Neurons/day, ~hundreds of answers) handles every request; when that call
+  fails — e.g. the daily free allowance is spent — it **spills over to Claude** via
+  AI Gateway, then to the rule engine. Day-to-day answers are free; you only pay
+  Claude rates for overflow past the free tier.
+- **`ai-gateway`** — **Claude** first (via AI Gateway + Unified Billing, no key),
+  degrading to the native model, then rules. Use for best quality on every request.
 - **`anthropic`** — direct Anthropic API (needs the `ANTHROPIC_API_KEY` secret).
+- **`workers-ai`** — native model only, then rules.
 - **`rules`** — deterministic, no LLM.
 
-Any remote provider **degrades gracefully**: `ai-gateway`/`anthropic` → native
-Workers AI model → rule engine. So a missing credential, unloaded credits, a quota
-cap, or an outage never breaks the copilot — it just phrases a little more plainly.
+Every chain ends at the deterministic rule engine, so a spent free tier, missing
+credential, unloaded credits, quota cap, or outage never breaks the copilot — it
+just phrases a little more plainly.
+
+> Note: the free-tier hard cap that triggers spill-over applies on the **Workers
+> Free** plan. On **Workers Paid**, native usage past 10,000 Neurons/day is billed
+> at Workers AI rates rather than failing, so `auto` stays on the (cheap) native
+> model instead of spilling to Claude — still the lowest-cost path.
 
 ### Enabling Claude via AI Gateway (`ai-gateway`) — one-time account setup
 

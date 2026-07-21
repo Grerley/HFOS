@@ -201,10 +201,18 @@ type CopilotAttempt = { name: string; run: (facts: unknown) => Promise<string> }
  * Answer a copilot question. Always computes the deterministic rule-based result;
  * upgrades to an LLM phrasing when a provider is configured and available.
  *
- * The requested provider is tried first; a remote/paid provider (ai-gateway or
- * anthropic) then degrades to the free native Workers AI model before finally
- * falling back to the rule engine — so the copilot keeps working through a
- * missing key, unloaded AI-Gateway credits, a quota cap, or an outage.
+ * Providers (HFOS_COPILOT_PROVIDER):
+ *   "auto"        cost-first — free native Workers AI on every request, spilling
+ *                 over to Claude (AI Gateway) only when the native call fails
+ *                 (e.g. the daily free-tier allowance is spent), then rules.
+ *   "ai-gateway"  Claude first, degrading to the native model, then rules.
+ *   "anthropic"   direct Anthropic API first, degrading to native, then rules.
+ *   "workers-ai"  native model only, then rules.
+ *   "rules"       deterministic only.
+ *
+ * Whatever the order, the chain always ends at the deterministic rule engine, so
+ * a missing credential, spent free tier, unloaded credits, quota cap, or outage
+ * never breaks the copilot.
  */
 export async function copilotAnswer(env: Env, db: DB, householdId: number, question: string, periodId: number | null) {
   const rule = await answerQuestion(db, householdId, question, periodId);
@@ -218,18 +226,28 @@ export async function copilotAnswer(env: Env, db: DB, householdId: number, quest
   const model = env.HFOS_COPILOT_MODEL;
   const gatewayId = env.HFOS_AI_GATEWAY_ID || DEFAULT_AI_GATEWAY_ID;
 
+  // Reusable attempt builders. In "auto" mode HFOS_COPILOT_MODEL tunes the Claude
+  // spill-over tier (the native tier stays on the free default).
+  const nativeAttempt: CopilotAttempt = { name: "workers-ai", run: (f) => runWorkersAI(env, DEFAULT_WORKERS_AI_MODEL, f, question) };
+  const gatewayAttempt: CopilotAttempt = { name: "ai-gateway", run: (f) => runAiGateway(env, model || DEFAULT_AI_GATEWAY_MODEL, gatewayId, f, question) };
+  const anthropicAttempt: CopilotAttempt = { name: "anthropic", run: (f) => runAnthropic(env, model || DEFAULT_ANTHROPIC_MODEL, f, question) };
+
   const attempts: CopilotAttempt[] = [];
-  if (provider === "ai-gateway" && hasAI) {
-    attempts.push({ name: "ai-gateway", run: (f) => runAiGateway(env, model || DEFAULT_AI_GATEWAY_MODEL, gatewayId, f, question) });
+  if (provider === "auto") {
+    // Cheapest that works, first: free native → Claude spill-over → rules.
+    if (hasAI) {
+      attempts.push(nativeAttempt);
+      attempts.push(gatewayAttempt);
+    } else if (hasKey) {
+      attempts.push(anthropicAttempt);
+    }
+  } else if (provider === "ai-gateway" && hasAI) {
+    attempts.push(gatewayAttempt, nativeAttempt);
   } else if (provider === "anthropic" && hasKey) {
-    attempts.push({ name: "anthropic", run: (f) => runAnthropic(env, model || DEFAULT_ANTHROPIC_MODEL, f, question) });
+    attempts.push(anthropicAttempt);
+    if (hasAI) attempts.push(nativeAttempt);
   } else if (provider === "workers-ai" && hasAI) {
     attempts.push({ name: "workers-ai", run: (f) => runWorkersAI(env, model || DEFAULT_WORKERS_AI_MODEL, f, question) });
-  }
-
-  // Resilience: a remote/paid primary degrades to the free native model before rules.
-  if ((provider === "ai-gateway" || provider === "anthropic") && hasAI) {
-    attempts.push({ name: "workers-ai", run: (f) => runWorkersAI(env, DEFAULT_WORKERS_AI_MODEL, f, question) });
   }
 
   if (attempts.length === 0) return rule; // provider requested but unavailable → safe fallback
