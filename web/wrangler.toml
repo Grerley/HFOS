@@ -15,7 +15,8 @@ database_name = "hfos-db"
 database_id = "bd46243a-954d-4465-98ac-7f91e230661b"
 migrations_dir = "migrations"
 
-# Workers AI — native LLM binding, no API key/secret to manage. Powers the
+# Workers AI — native LLM binding, no API key/secret to manage. This same
+# binding also routes Claude via AI Gateway (provider "ai-gateway"). Powers the
 # copilot's natural-language phrasing (numbers still come from the calc engine).
 [ai]
 binding = "AI"
@@ -24,8 +25,18 @@ binding = "AI"
 #   wrangler secret put HFOS_SECRET_KEY
 # or in the dashboard → Worker → Settings → Variables (encrypted).
 #
-# HFOS_COPILOT_PROVIDER: "workers-ai" (default, native, zero-secret),
-#   "anthropic" (set ANTHROPIC_API_KEY secret for higher quality), or "rules".
+# HFOS_COPILOT_PROVIDER selects how the copilot phrases answers:
+#   "workers-ai"  native open model on Cloudflare's GPUs — free-tier, no key (default)
+#   "ai-gateway"  Claude via Cloudflare AI Gateway + Unified Billing — no key, billed
+#                 to Cloudflare credits. Requires an AI Gateway + loaded credits.
+#   "anthropic"   direct Anthropic API — set the ANTHROPIC_API_KEY secret
+#   "rules"       deterministic, no LLM
+# Any remote provider degrades to the native model, then the rule engine, on failure.
+#
+# To switch the copilot to Claude once AI-Gateway credits are loaded, set:
+#   HFOS_COPILOT_PROVIDER = "ai-gateway"
+#   HFOS_AI_GATEWAY_ID    = "<your gateway name>"   # optional; defaults to "default"
+#   HFOS_COPILOT_MODEL    = "anthropic/claude-sonnet-4.5"  # optional; provider default
 [vars]
 HFOS_COPILOT_PROVIDER = "workers-ai"
 # Transactional email sender. Resend's onboarding domain works out of the box but

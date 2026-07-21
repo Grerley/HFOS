@@ -77,6 +77,39 @@ npm test                  # vitest: calc engine + query/import unit tests
   through the **Cloudflare MCP server** / `wrangler` from our sessions.
 - Time-travel restore gives point-in-time recovery of the database for ~30 days.
 
+## Copilot LLM provider
+
+The copilot phrases answers with an LLM; every number still comes from the calc
+engine. The provider is chosen by `HFOS_COPILOT_PROVIDER` (in `wrangler.toml`):
+
+- **`workers-ai`** (default) — a native open model on Cloudflare's GPUs. Free tier
+  (10,000 Neurons/day, ~hundreds of copilot answers), no key, data stays in-region.
+- **`ai-gateway`** — **Claude** via Cloudflare AI Gateway. No API key: third-party
+  models bill through **Unified Billing** (Cloudflare credits). Best phrasing quality.
+- **`anthropic`** — direct Anthropic API (needs the `ANTHROPIC_API_KEY` secret).
+- **`rules`** — deterministic, no LLM.
+
+Any remote provider **degrades gracefully**: `ai-gateway`/`anthropic` → native
+Workers AI model → rule engine. So a missing credential, unloaded credits, a quota
+cap, or an outage never breaks the copilot — it just phrases a little more plainly.
+
+### Enabling Claude via AI Gateway (`ai-gateway`) — one-time account setup
+
+No key to manage. Your steps, in the Cloudflare dashboard:
+
+1. **AI → AI Gateway → Create gateway** (e.g. name it `hfos`). A `default` gateway
+   is also auto-created on first use.
+2. **Load Unified Billing credits** (AI Gateway → Unified Billing → add a payment
+   method + credits). This is what lets third-party models run without a provider key.
+3. *(Recommended)* Set a **spend limit** on the gateway as a hard cost cap.
+4. Tell me the gateway name; I flip `HFOS_COPILOT_PROVIDER = "ai-gateway"` (+ set
+   `HFOS_AI_GATEWAY_ID`) and push — or set those vars yourself in **Worker → Settings
+   → Variables**. It goes live on the next deploy; costs land on your Cloudflare bill.
+
+Model is `anthropic/claude-sonnet-4.5` by default; override with `HFOS_COPILOT_MODEL`
+(bump it as Cloudflare's catalog adds newer Claude models). The `[ai]` binding needed
+for this is already configured — nothing changes in CI, and no secret is added.
+
 ## Rollback
 - Workers keeps prior versions — roll back in the dashboard or `wrangler rollback`.
 - D1 — `wrangler d1 time-travel restore hfos-db --timestamp <ISO>`.
