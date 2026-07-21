@@ -103,6 +103,10 @@ async function getScoped<T extends { household_id?: number | null }>(
 }
 
 const LIABILITY_TYPES = new Set(["loan", "credit_card", "bond"]);
+// Net-worth account classification: bond accounts are ignored here because
+// property bonds are counted via property equity (avoids double-counting).
+const NW_LIABILITY_TYPES = new Set(["loan", "credit_card"]);
+const NW_IGNORE_TYPES = new Set(["bond"]);
 
 function monthsBetween(target: string | null): number {
   if (!target) return 0;
@@ -700,16 +704,22 @@ route("GET", "/dashboard", async (req) => {
   const summary = calc.periodSummary(lines);
   const members = new Map((await ctx.db.select().from(householdMembers).where(eq(householdMembers.household_id, ctx.householdId))).map((m) => [m.id, m.name]));
   const owner_cards = Object.entries(summary.owner_positions).map(([mid, v]) => ({ member_id: Number(mid), member_name: members.get(Number(mid)) ?? "Unknown", ...v }));
+  // Net worth = liquid/investment account assets − account debts + property equity.
+  // "bond" accounts are excluded because property debt is already netted in
+  // property equity (a bond IS a property loan) — otherwise it double-counts.
   const accRows = await ctx.db.select().from(accounts).where(eq(accounts.household_id, ctx.householdId));
-  const net_worth_cents = calc.netWorth(
-    accRows.filter((a) => !LIABILITY_TYPES.has(a.type)).map((a) => a.current_balance_cents),
-    accRows.filter((a) => LIABILITY_TYPES.has(a.type)).map((a) => a.current_balance_cents),
-  );
+  const account_assets_cents = accRows.filter((a) => !NW_LIABILITY_TYPES.has(a.type) && !NW_IGNORE_TYPES.has(a.type)).reduce((s, a) => s + a.current_balance_cents, 0);
+  const account_liabilities_cents = accRows.filter((a) => NW_LIABILITY_TYPES.has(a.type)).reduce((s, a) => s + Math.abs(a.current_balance_cents), 0);
+  const propRows = await ctx.db.select().from(properties).where(eq(properties.household_id, ctx.householdId));
+  const property_equity_cents = propRows.reduce((s, p) => s + calc.propertyEquity(p.market_value_cents, p.outstanding_bond_cents, p.ownership_share_bp ?? 10000), 0);
+  const net_worth_cents = account_assets_cents - account_liabilities_cents + property_equity_cents;
   const hh = (await ctx.db.select().from(households).where(eq(households.id, ctx.householdId))).at(0);
   return json({
     has_period: true,
     period: { id: period.id, label: period.label, status: period.status, start_date: period.start_date, end_date: period.end_date },
-    summary, owner_cards, net_worth_cents, currency: hh?.base_currency ?? "ZAR",
+    summary, owner_cards, net_worth_cents,
+    net_worth_breakdown: { account_assets_cents, account_liabilities_cents, property_equity_cents },
+    currency: hh?.base_currency ?? "ZAR",
   });
 });
 route("GET", "/reports/monthly", async (req) => {

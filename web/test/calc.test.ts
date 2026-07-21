@@ -137,6 +137,12 @@ describe("calculation engine", () => {
     expect(calc.netWorth([10000, 5000], [3000])).toBe(12000);
   });
 
+  it("property equity nets bond and applies ownership share", () => {
+    expect(calc.propertyEquity(1_000_000, 400_000)).toBe(600_000); // full ownership
+    expect(calc.propertyEquity(1_000_000, 400_000, 5000)).toBe(300_000); // 50% share
+    expect(calc.propertyEquity(500_000, 700_000)).toBe(-200_000); // underwater
+  });
+
   it("scenario delta", () => {
     const d = calc.scenarioDelta({ net: 500000 }, { net: 350000 });
     expect(d.net.delta).toBe(-150000);

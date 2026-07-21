@@ -304,6 +304,11 @@ export function netWorth(assetBalancesCents: number[], liabilityBalancesCents: n
   );
 }
 
+/** A household's share of a property's equity (market value − outstanding bond). */
+export function propertyEquity(marketValueCents: number, outstandingBondCents: number, ownershipShareBp = 10000): number {
+  return Math.round(((marketValueCents - outstandingBondCents) * ownershipShareBp) / 10000);
+}
+
 // ── Scenario deltas ──────────────────────────────────────────────────────────
 export function scenarioDelta(
   baseline: Record<string, number>,

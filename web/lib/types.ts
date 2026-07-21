@@ -80,6 +80,11 @@ export interface DashboardResponse {
   summary?: PeriodSummary;
   owner_cards?: OwnerCard[];
   net_worth_cents?: number;
+  net_worth_breakdown?: {
+    account_assets_cents: number;
+    account_liabilities_cents: number;
+    property_equity_cents: number;
+  };
   currency?: string;
 }
 

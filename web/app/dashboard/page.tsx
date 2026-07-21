@@ -151,7 +151,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <StatCard label="Net worth" value={formatMoney(data.net_worth_cents, currency)} hint="Assets − liabilities" onClick={() => openDrill("networth")} />
+        <StatCard label="Net worth" value={formatMoney(data.net_worth_cents, currency)} hint="Accounts + property equity" onClick={() => openDrill("networth")} />
         <StatCard label="Actual income" value={formatMoney(data.summary!.actual.total_income_cents, currency)} />
         <StatCard
           label="Expense variance"
@@ -234,6 +234,7 @@ export default function DashboardPage() {
         onClose={() => setDrill(null)}
         summary={data.summary!}
         netWorthCents={data.net_worth_cents ?? 0}
+        netWorthBreakdown={data.net_worth_breakdown}
         currency={currency}
         detail={detail}
       />
@@ -248,6 +249,7 @@ function MetricDrawer({
   onClose,
   summary,
   netWorthCents,
+  netWorthBreakdown,
   currency,
   detail,
 }: {
@@ -255,6 +257,7 @@ function MetricDrawer({
   onClose: () => void;
   summary: NonNullable<DashboardResponse["summary"]>;
   netWorthCents: number;
+  netWorthBreakdown?: DashboardResponse["net_worth_breakdown"];
   currency: string;
   detail: { lines: any[]; cats: any[]; accounts: any[] } | null;
 }) {
@@ -338,20 +341,20 @@ function MetricDrawer({
     },
     networth: {
       title: "Net worth",
-      subtitle: "Assets − liabilities across accounts",
+      subtitle: "Account assets − debts + property equity",
       render: () => {
-        const accts = detail?.accounts || [];
+        const b = netWorthBreakdown;
         return (
           <>
-            {accts.map((a) => (
-              <DrillRow
-                key={a.id}
-                label={a.name || a.institution || `Account ${a.id}`}
-                value={money(a.balance_cents ?? a.current_balance_cents ?? 0)}
-                tone={(a.balance_cents ?? a.current_balance_cents ?? 0) < 0 ? "negative" : undefined}
-              />
-            ))}
-            {!accts.length && !loading && <EmptyRow label="No accounts linked yet." />}
+            {b ? (
+              <>
+                <DrillRow label="Account assets" value={money(b.account_assets_cents)} tone="positive" />
+                <DrillRow label="Account debts (loans, cards)" value={`− ${money(b.account_liabilities_cents)}`} tone={b.account_liabilities_cents > 0 ? "negative" : undefined} />
+                <DrillRow label="Property equity (value − bonds)" value={money(b.property_equity_cents)} tone={b.property_equity_cents >= 0 ? "positive" : "negative"} />
+              </>
+            ) : (
+              <EmptyRow label="Breakdown unavailable." />
+            )}
             <DrillRow label="Net worth" value={money(netWorthCents)} strong tone={netWorthCents >= 0 ? "positive" : "negative"} />
           </>
         );
