@@ -9,9 +9,17 @@ a finished commercial product. This document is honest about what is and isn't d
 - **Migrations:** schema is driven by SQLAlchemy models + `create_all()` for dev/SQLite. An
   Alembic autogenerate step is documented for Postgres but no versioned migration file is
   committed yet.
-- **Copilot is rule-based**, not an LLM. Intent matching is keyword-based. The `CopilotProvider`
-  seam and grounding contract (model must call deterministic calc tools for numbers) are in
-  place; the live LLM call is not wired.
+- **Copilot is LLM-backed** through a provider seam, under a strict grounding contract: every
+  number comes from the deterministic calc engine and is handed to the model as pre-formatted
+  facts — the model only phrases, never computes. The default `auto` mode is cost-first: the free
+  native Cloudflare **Workers AI** model handles every request and spills over to **Claude** (via
+  Cloudflare **AI Gateway**, no API key — usage billed to Cloudflare credits) only when the daily
+  free tier is spent, then degrades to the keyword rule engine. Providers are switchable via
+  `HFOS_COPILOT_PROVIDER` (`auto`, `ai-gateway`, `anthropic`, `workers-ai`, `rules`); the model is
+  overridable via `HFOS_COPILOT_MODEL`. **Current state:** AI Gateway credits are not yet loaded,
+  so in practice the copilot runs entirely on the free native model and any Claude spillover falls
+  through to the rule engine until credits are added. Intent matching in the rule tier remains
+  keyword-based.
 - **Net worth** is computed from account balances only; property market value and investment
   holdings are not yet folded into net worth (properties are tracked separately).
 - **Transactions**: manual entry + line matching only. No CSV/bank import, no auto-categorisation,
@@ -49,8 +57,9 @@ a finished commercial product. This document is honest about what is and isn't d
 12. Multi-household switcher.
 
 ### P2 — differentiators
-- LLM copilot wired to the `CopilotProvider` seam (tool-calling to the calc engine), CFO briefings,
-  anomaly detection over history, natural-language scenarios (HFOS-093, 094, 120–124).
+- LLM copilot: the provider seam is **wired and live** (native Workers AI + Claude via AI Gateway,
+  grounded phrasing over calc-engine facts). Remaining: CFO briefings, anomaly detection over
+  history, natural-language scenarios (HFOS-093, 094, 120–124).
 - Open-banking / aggregation sync (HFOS-013).
 - Investment liquidity/risk classification, financial health score.
 - Document vault (receipts/statements) with OCR extraction.

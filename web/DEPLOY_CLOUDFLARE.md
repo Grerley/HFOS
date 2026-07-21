@@ -102,22 +102,27 @@ just phrases a little more plainly.
 > at Workers AI rates rather than failing, so `auto` stays on the (cheap) native
 > model instead of spilling to Claude — still the lowest-cost path.
 
-### Enabling Claude via AI Gateway (`ai-gateway`) — one-time account setup
+### Current state (deployed)
 
-No key to manage. Your steps, in the Cloudflare dashboard:
+- **Provider:** `HFOS_COPILOT_PROVIDER = "auto"` (cost-first) is committed and deployed.
+- **Gateway:** an AI Gateway named **`hfos`** exists and is wired via
+  `HFOS_AI_GATEWAY_ID = "hfos"`; a `$100/week` spend limit and rate limit are set on it.
+- **Model:** Claude tier defaults to `anthropic/claude-sonnet-4.5` (override with
+  `HFOS_COPILOT_MODEL`; bump as Cloudflare's catalog adds newer Claude models).
+- **Billing:** a payment method is set up, but **Unified Billing credits are not yet
+  loaded** — a deliberate "no spend yet" choice. So today the copilot runs entirely on
+  the **free native model**, and any Claude spillover falls through to the rule engine.
+  The `[ai]` binding is configured; there is no secret and no CI change for this path.
 
-1. **AI → AI Gateway → Create gateway** (e.g. name it `hfos`). A `default` gateway
-   is also auto-created on first use.
-2. **Load Unified Billing credits** (AI Gateway → Unified Billing → add a payment
-   method + credits). This is what lets third-party models run without a provider key.
-3. *(Recommended)* Set a **spend limit** on the gateway as a hard cost cap.
-4. Tell me the gateway name; I flip `HFOS_COPILOT_PROVIDER = "ai-gateway"` (+ set
-   `HFOS_AI_GATEWAY_ID`) and push — or set those vars yourself in **Worker → Settings
-   → Variables**. It goes live on the next deploy; costs land on your Cloudflare bill.
+### Turning Claude on later (when you want to be billed)
 
-Model is `anthropic/claude-sonnet-4.5` by default; override with `HFOS_COPILOT_MODEL`
-(bump it as Cloudflare's catalog adds newer Claude models). The `[ai]` binding needed
-for this is already configured — nothing changes in CI, and no secret is added.
+1. **Load Unified Billing credits** — Cloudflare → AI Gateway → **Credits Available →
+   Manage → Top-up** (prepaid; a 5% fee applies on purchase, then provider token rates
+   pass through with no markup). Optionally enable **auto top-up** so it never runs dry.
+2. That's all that's needed for `auto`: Claude spillover activates automatically once a
+   positive credit balance exists — no code change. To make Claude answer *every*
+   request instead of only overflow, set `HFOS_COPILOT_PROVIDER = "ai-gateway"` (in
+   `wrangler.toml`, or **Worker → Settings → Variables**).
 
 ## Rollback
 - Workers keeps prior versions — roll back in the dashboard or `wrangler rollback`.
