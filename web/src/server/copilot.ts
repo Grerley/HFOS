@@ -18,8 +18,17 @@ import { answerQuestion } from "./insights";
 
 const LIABILITY_TYPES = new Set(["loan", "credit_card", "bond"]);
 const LLM_TIMEOUT_MS = 9000;
-const WORKERS_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
-const ANTHROPIC_MODEL = "claude-sonnet-5";
+
+// Per-provider default models (each overridable via HFOS_COPILOT_MODEL).
+// Native Workers AI model — free-tier, in-region. fp8-fast supersedes the
+// deprecated "@cf/meta/llama-3.1-8b-instruct" and is cheaper + faster.
+const DEFAULT_WORKERS_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8-fast";
+// Claude via Cloudflare AI Gateway (Unified Billing, no key). Cloudflare's
+// catalog uses dotted names; bump this as newer Claude models are listed.
+const DEFAULT_AI_GATEWAY_MODEL = "anthropic/claude-sonnet-4.5";
+// Direct Anthropic API (needs ANTHROPIC_API_KEY).
+const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
+const DEFAULT_AI_GATEWAY_ID = "default";
 
 function money(cents: number, currency: string) {
   const v = (cents / 100).toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -100,48 +109,102 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-async function runWorkersAI(env: Env, facts: unknown, question: string): Promise<string> {
+const userContent = (facts: unknown, question: string) =>
+  `FACTS:\n${JSON.stringify(facts)}\n\nQUESTION: ${question}`;
+
+/**
+ * Extract the answer text across the three response shapes we may see:
+ *  - Workers AI native (@cf/*):            { response: "..." }
+ *  - AI Gateway → Anthropic-compatible:    { content: [{ type, text }] }
+ *  - OpenAI-compatible fallback shape:     { choices: [{ message: { content } }] }
+ */
+function extractText(out: any): string {
+  if (typeof out?.response === "string" && out.response.trim()) return out.response.trim();
+  if (Array.isArray(out?.content)) {
+    const t = out.content.map((b: any) => (typeof b?.text === "string" ? b.text : "")).join("").trim();
+    if (t) return t;
+  }
+  const c = out?.choices?.[0]?.message?.content;
+  if (typeof c === "string" && c.trim()) return c.trim();
+  return "";
+}
+
+/** Native Workers AI (open model on Cloudflare's GPUs). Free-tier, in-region, no key. */
+async function runWorkersAI(env: Env, model: string, facts: unknown, question: string): Promise<string> {
   const ai: any = (env as any).AI;
   const out: any = await withTimeout(
-    ai.run(WORKERS_AI_MODEL, {
+    ai.run(model, {
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `FACTS:\n${JSON.stringify(facts)}\n\nQUESTION: ${question}` },
+        { role: "user", content: userContent(facts, question) },
       ],
       max_tokens: 400,
     }),
     LLM_TIMEOUT_MS,
   );
-  const text = (out?.response ?? "").trim();
+  const text = extractText(out);
   if (!text) throw new Error("empty_llm_response");
   return text;
 }
 
-async function runAnthropic(env: Env, facts: unknown, question: string): Promise<string> {
+/**
+ * Claude via the same AI binding, routed through Cloudflare AI Gateway.
+ * Third-party models bill through Unified Billing — Cloudflare manages the
+ * Anthropic credentials, so there is no API key to hold. Requires an AI
+ * Gateway and loaded credits on the account.
+ */
+async function runAiGateway(env: Env, model: string, gatewayId: string, facts: unknown, question: string): Promise<string> {
+  const ai: any = (env as any).AI;
+  const out: any = await withTimeout(
+    ai.run(
+      model,
+      {
+        max_tokens: 400,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: userContent(facts, question) }],
+      },
+      { gateway: { id: gatewayId } },
+    ),
+    LLM_TIMEOUT_MS,
+  );
+  const text = extractText(out);
+  if (!text) throw new Error("empty_llm_response");
+  return text;
+}
+
+/** Direct Anthropic API (needs ANTHROPIC_API_KEY). */
+async function runAnthropic(env: Env, model: string, facts: unknown, question: string): Promise<string> {
   const key = (env as any).ANTHROPIC_API_KEY as string;
   const res = await withTimeout(
     fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: ANTHROPIC_MODEL,
+        model,
         max_tokens: 400,
         system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: `FACTS:\n${JSON.stringify(facts)}\n\nQUESTION: ${question}` }],
+        messages: [{ role: "user", content: userContent(facts, question) }],
       }),
     }),
     LLM_TIMEOUT_MS,
   );
   if (!res.ok) throw new Error(`anthropic_${res.status}`);
   const data: any = await res.json();
-  const text = (data?.content?.[0]?.text ?? "").trim();
+  const text = extractText(data);
   if (!text) throw new Error("empty_llm_response");
   return text;
 }
 
+type CopilotAttempt = { name: string; run: (facts: unknown) => Promise<string> };
+
 /**
  * Answer a copilot question. Always computes the deterministic rule-based result;
  * upgrades to an LLM phrasing when a provider is configured and available.
+ *
+ * The requested provider is tried first; a remote/paid provider (ai-gateway or
+ * anthropic) then degrades to the free native Workers AI model before finally
+ * falling back to the rule engine — so the copilot keeps working through a
+ * missing key, unloaded AI-Gateway credits, a quota cap, or an outage.
  */
 export async function copilotAnswer(env: Env, db: DB, householdId: number, question: string, periodId: number | null) {
   const rule = await answerQuestion(db, householdId, question, periodId);
@@ -150,22 +213,49 @@ export async function copilotAnswer(env: Env, db: DB, householdId: number, quest
   // No period, no LLM value-add — return the deterministic prompt.
   if (periodId == null || provider === "rules") return rule;
 
-  const canWorkersAI = provider === "workers-ai" && !!(env as any).AI;
-  const canAnthropic = provider === "anthropic" && !!(env as any).ANTHROPIC_API_KEY;
-  if (!canWorkersAI && !canAnthropic) return rule; // provider requested but unavailable → safe fallback
+  const hasAI = !!(env as any).AI;
+  const hasKey = !!(env as any).ANTHROPIC_API_KEY;
+  const model = env.HFOS_COPILOT_MODEL;
+  const gatewayId = env.HFOS_AI_GATEWAY_ID || DEFAULT_AI_GATEWAY_ID;
 
-  try {
-    const facts = await buildFacts(db, householdId, periodId);
-    const answer = canAnthropic ? await runAnthropic(env, facts, question) : await runWorkersAI(env, facts, question);
-    return {
-      answer,
-      citations: [{ source: "calculation_engine", period_id: periodId, facts }],
-      matched_intent: rule.matched_intent,
-      provider: canAnthropic ? "anthropic" : "workers-ai",
-      grounded: true,
-    };
-  } catch {
-    // Any model failure (timeout, quota, empty) degrades gracefully to the rules answer.
-    return { ...rule, provider: "rules", degraded: true };
+  const attempts: CopilotAttempt[] = [];
+  if (provider === "ai-gateway" && hasAI) {
+    attempts.push({ name: "ai-gateway", run: (f) => runAiGateway(env, model || DEFAULT_AI_GATEWAY_MODEL, gatewayId, f, question) });
+  } else if (provider === "anthropic" && hasKey) {
+    attempts.push({ name: "anthropic", run: (f) => runAnthropic(env, model || DEFAULT_ANTHROPIC_MODEL, f, question) });
+  } else if (provider === "workers-ai" && hasAI) {
+    attempts.push({ name: "workers-ai", run: (f) => runWorkersAI(env, model || DEFAULT_WORKERS_AI_MODEL, f, question) });
   }
+
+  // Resilience: a remote/paid primary degrades to the free native model before rules.
+  if ((provider === "ai-gateway" || provider === "anthropic") && hasAI) {
+    attempts.push({ name: "workers-ai", run: (f) => runWorkersAI(env, DEFAULT_WORKERS_AI_MODEL, f, question) });
+  }
+
+  if (attempts.length === 0) return rule; // provider requested but unavailable → safe fallback
+
+  let facts: unknown;
+  try {
+    facts = await buildFacts(db, householdId, periodId);
+  } catch {
+    return rule;
+  }
+
+  for (const attempt of attempts) {
+    try {
+      const answer = await attempt.run(facts);
+      return {
+        answer,
+        citations: [{ source: "calculation_engine", period_id: periodId, facts }],
+        matched_intent: rule.matched_intent,
+        provider: attempt.name,
+        grounded: true,
+      };
+    } catch {
+      // Try the next attempt in the chain.
+    }
+  }
+
+  // Every LLM attempt failed → deterministic rules answer.
+  return { ...rule, provider: "rules", degraded: true };
 }
