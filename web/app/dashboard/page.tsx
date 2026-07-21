@@ -162,8 +162,26 @@ export default function DashboardPage() {
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card title="Expense breakdown" subtitle="Share of planned expenses by category">
-          <CategoryBars rows={data.summary!.category_breakdown} format={(c) => formatMoney(c, currency)} />
+        <Card
+          title="Expense breakdown"
+          subtitle="Top categories by share of planned expenses"
+          actions={
+            data.summary!.category_breakdown.length > 10 ? (
+              <button onClick={() => openDrill("expenses")} className="text-xs font-medium text-brand-dark hover:underline">
+                Show all {data.summary!.category_breakdown.length} →
+              </button>
+            ) : undefined
+          }
+        >
+          <CategoryBars rows={data.summary!.category_breakdown.slice(0, 10)} format={(c) => formatMoney(c, currency)} />
+          {data.summary!.category_breakdown.length > 10 && (
+            <button
+              onClick={() => openDrill("expenses")}
+              className="mt-3 w-full rounded-lg border border-line-soft py-2 text-xs font-medium text-ink-soft hover:bg-muted"
+            >
+              + {data.summary!.category_breakdown.length - 10} more categories — view all
+            </button>
+          )}
         </Card>
 
         <Card title="Owner contributions" subtitle="Income, responsibility and net by member">
