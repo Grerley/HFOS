@@ -419,6 +419,28 @@ route("POST", "/categories", async (req) => {
   }).returning();
   return json(c, 201);
 });
+route("PATCH", "/categories/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const cat = await getScoped(ctx.db.select().from(categories).where(eq(categories.id, Number(params.id))), ctx.householdId, "Category");
+  const p = await body(req);
+  const allowed: any = {};
+  for (const k of ["name", "type", "parent_id", "sort_order", "default_owner_member_id", "is_section", "is_active"]) if (k in p) allowed[k] = p[k];
+  await ctx.db.update(categories).set(allowed).where(eq(categories.id, cat.id));
+  return json((await ctx.db.select().from(categories).where(eq(categories.id, cat.id))).at(0));
+});
+route("DELETE", "/categories/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const cat = await getScoped(ctx.db.select().from(categories).where(eq(categories.id, Number(params.id))), ctx.householdId, "Category");
+  const usedBy = await ctx.db.select().from(budgetLines).where(and(eq(budgetLines.household_id, ctx.householdId), eq(budgetLines.category_id, cat.id)));
+  if (usedBy.length) throw new HttpError(409, `In use by ${usedBy.length} budget line${usedBy.length === 1 ? "" : "s"} — reassign or remove them first.`);
+  if (cat.is_section) {
+    const children = await ctx.db.select().from(categories).where(and(eq(categories.household_id, ctx.householdId), eq(categories.parent_id, cat.id)));
+    if (children.length) throw new HttpError(409, `Move or delete this section's ${children.length} sub-categor${children.length === 1 ? "y" : "ies"} first.`);
+  }
+  await ctx.db.delete(categories).where(eq(categories.id, cat.id));
+  await recordAudit(ctx.db, { action: "category.removed", entity_type: "category", entity_id: cat.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: { name: cat.name } });
+  return new Response(null, { status: 204 });
+});
 
 // ── Budget ────────────────────────────────────────────────────────────────────
 route("GET", "/budget-periods", async (req) => {

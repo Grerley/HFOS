@@ -11,6 +11,7 @@ interface Account { id: number; name: string; type: string; current_balance_cent
 
 const CURRENCIES = ["ZAR", "USD", "EUR", "GBP", "AUD", "CAD", "NGN", "KES", "GHS", "INR", "AED", "JPY", "CHF", "CNY", "BWP", "NAD", "ZMW", "MZN"];
 const ROLES = ["owner", "partner", "admin", "advisor", "viewer", "child"];
+const CATEGORY_TYPES = ["income", "expense", "saving", "investment", "transfer"];
 
 export default function SettingsPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -27,6 +28,7 @@ export default function SettingsPage() {
   const currency = useCurrency();
 
   const isAdmin = household?.role === "owner" || household?.role === "admin";
+  const canWrite = ["owner", "partner", "admin"].includes(household?.role ?? "");
 
   async function load() {
     setLoading(true);
@@ -81,6 +83,38 @@ export default function SettingsPage() {
   async function removeAccount(a: Account) {
     if (!confirm(`Remove account "${a.name}"? Its balance history is deleted and any budget lines paying from it are detached.`)) return;
     try { await api.del(`/accounts/${a.id}`); await load(); }
+    catch (err: any) { alert(err.message); }
+  }
+
+  async function renameCategory(c: Category, name: string) {
+    if (!name.trim() || name.trim() === c.name) return;
+    try { await api.patch(`/categories/${c.id}`, { name: name.trim() }); await load(); }
+    catch (err: any) { alert(err.message); }
+  }
+  async function setCategoryType(c: Category, type: string) {
+    try { await api.patch(`/categories/${c.id}`, { type }); await load(); }
+    catch (err: any) { alert(err.message); }
+  }
+  async function deleteCategory(c: Category) {
+    if (!confirm(`Delete "${c.name}"?`)) return;
+    try { await api.del(`/categories/${c.id}`); await load(); }
+    catch (err: any) { alert(err.message); } // 409 shows the "in use / has children" reason
+  }
+  async function addChildCategory(sectionId: number, type: string, e: React.FormEvent) {
+    e.preventDefault();
+    const form = e.target as HTMLFormElement;
+    const name = (new FormData(form).get("name") as string)?.trim();
+    if (!name) return;
+    try { await api.post("/categories", { name, type, parent_id: sectionId, is_section: false }); form.reset(); await load(); }
+    catch (err: any) { alert(err.message); }
+  }
+  async function addSection(e: React.FormEvent) {
+    e.preventDefault();
+    const form = e.target as HTMLFormElement;
+    const f = new FormData(form);
+    const name = (f.get("name") as string)?.trim();
+    if (!name) return;
+    try { await api.post("/categories", { name, type: f.get("type"), is_section: true }); form.reset(); await load(); }
     catch (err: any) { alert(err.message); }
   }
 
@@ -289,19 +323,55 @@ export default function SettingsPage() {
           </form>
         </Card>
 
-        <Card title="Category taxonomy" subtitle="Default sections from the workbook">
-          <div className="space-y-2">
+        <Card title="Category taxonomy" subtitle={canWrite ? "Rename, add or remove sections and sub-categories" : "Sections and sub-categories"} className="lg:col-span-2">
+          <div className="space-y-3">
             {sections.map((s) => (
-              <div key={s.id} className="rounded-lg border border-line-soft px-4 py-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{s.name}</span>
-                  <Badge tone="info">{s.type}</Badge>
+              <div key={s.id} className="rounded-lg border border-line-soft px-4 py-3">
+                <div className="flex items-center gap-2">
+                  {canWrite ? (
+                    <input defaultValue={s.name} onBlur={(e) => renameCategory(s, e.target.value)}
+                      className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm font-medium outline-none hover:border-line focus:border-brand focus:bg-card" />
+                  ) : <span className="min-w-0 flex-1 truncate text-sm font-medium">{s.name}</span>}
+                  {canWrite ? (
+                    <Select value={s.type} onChange={(e) => setCategoryType(s, e.target.value)} className="!w-auto !py-1 text-xs">
+                      {CATEGORY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </Select>
+                  ) : <Badge tone="info">{s.type}</Badge>}
+                  {canWrite && <button onClick={() => deleteCategory(s)} title="Delete section" className="rounded px-1.5 text-ink-muted hover:text-negative">✕</button>}
                 </div>
-                <div className="mt-1 text-xs text-ink-muted">
-                  {categories.filter((c) => c.parent_id === s.id).map((c) => c.name).join(" · ") || "no children"}
+
+                <div className="mt-2 space-y-1 pl-3">
+                  {categories.filter((c) => c.parent_id === s.id).map((c) => (
+                    <div key={c.id} className="flex items-center gap-2">
+                      <span className="text-ink-muted" aria-hidden>·</span>
+                      {canWrite ? (
+                        <input defaultValue={c.name} onBlur={(e) => renameCategory(c, e.target.value)}
+                          className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm outline-none hover:border-line focus:border-brand focus:bg-card" />
+                      ) : <span className="min-w-0 flex-1 truncate text-sm">{c.name}</span>}
+                      {canWrite && <button onClick={() => deleteCategory(c)} title="Delete sub-category" className="rounded px-1.5 text-xs text-ink-muted hover:text-negative">✕</button>}
+                    </div>
+                  ))}
+                  {!categories.some((c) => c.parent_id === s.id) && <p className="text-xs text-ink-muted">No sub-categories.</p>}
+                  {canWrite && (
+                    <form onSubmit={(e) => addChildCategory(s.id, s.type, e)} className="flex items-center gap-2 pt-1">
+                      <Input name="name" placeholder={`Add sub-category to ${s.name}…`} className="!py-1 text-xs" />
+                      <Button type="submit" variant="ghost">Add</Button>
+                    </form>
+                  )}
                 </div>
               </div>
             ))}
+            {!sections.length && <p className="text-sm text-ink-muted">No sections yet.</p>}
+
+            {canWrite && (
+              <form onSubmit={addSection} className="flex flex-wrap items-center gap-2 border-t border-line-soft pt-3">
+                <Input name="name" placeholder="New section name" className="max-w-[14rem]" />
+                <Select name="type" defaultValue="expense" className="!w-auto">
+                  {CATEGORY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </Select>
+                <Button type="submit" variant="ghost">Add section</Button>
+              </form>
+            )}
           </div>
         </Card>
       </div>
