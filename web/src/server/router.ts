@@ -509,6 +509,21 @@ route("POST", "/budget-periods/:id/lines/batch", async (req, params) => {
   const period = await getScoped(ctx.db.select().from(budgetPeriods).where(eq(budgetPeriods.id, Number(params.id))), ctx.householdId, "Budget period");
   return json(await applyBatch(ctx.db, ctx.householdId, period, await body(req), ctx.userId));
 });
+route("POST", "/budget-periods/:id/lines/reorder", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const period = await getScoped(ctx.db.select().from(budgetPeriods).where(eq(budgetPeriods.id, Number(params.id))), ctx.householdId, "Budget period");
+  if (LOCKED_STATUSES.has(period.status)) throw new HttpError(409, "Period is locked");
+  const p = await body(req);
+  const ids: number[] = Array.isArray(p.line_ids) ? p.line_ids.map(Number) : [];
+  const valid = new Set((await ctx.db.select().from(budgetLines).where(and(eq(budgetLines.period_id, period.id), eq(budgetLines.household_id, ctx.householdId)))).map((l) => l.id));
+  let i = 0;
+  for (const id of ids) {
+    if (!valid.has(id)) continue;
+    await ctx.db.update(budgetLines).set({ sort_order: i }).where(eq(budgetLines.id, id));
+    i++;
+  }
+  return json({ reordered: i });
+});
 route("PATCH", "/budget-lines/:id", async (req, params) => {
   const ctx = await requireAuth(req); requireWrite(ctx);
   const line = await getScoped(ctx.db.select().from(budgetLines).where(eq(budgetLines.id, Number(params.id))), ctx.householdId, "Line");

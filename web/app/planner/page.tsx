@@ -25,6 +25,8 @@ export default function PlannerPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeSection, setActiveSection] = useState<number | null>(null);
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [overId, setOverId] = useState<number | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [backfillOpen, setBackfillOpen] = useState(false);
   const [backfillDay, setBackfillDay] = useState("");
@@ -126,6 +128,30 @@ export default function PlannerPage() {
         payment_status: "planned", payment_type: "manual", is_tithe: false, is_recurring: true, priority: 3, needs_review: false, _new: true,
       } as EditRow,
     ]);
+  }
+
+  // Drag-and-drop reorder within the active section; persists sort_order.
+  async function dropOnRow(targetId: number) {
+    const src = dragId;
+    setDragId(null);
+    setOverId(null);
+    if (src == null || src === targetId) return;
+    const sectionRows = rows.filter((r) => sectionIdOf(r.category_id) === activeSection);
+    const others = rows.filter((r) => sectionIdOf(r.category_id) !== activeSection);
+    const from = sectionRows.findIndex((r) => r.id === src);
+    const to = sectionRows.findIndex((r) => r.id === targetId);
+    if (from < 0 || to < 0 || from === to) return;
+    const next = [...sectionRows];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    const newRows = [...others, ...next];
+    setRows(newRows);
+    // Persist the full saved order so sort_order is a clean global sequence.
+    const ids = newRows.filter((r) => !r._new && r.id > 0).map((r) => r.id);
+    if (periodId && ids.length > 1) {
+      try { await api.post(`/budget-periods/${periodId}/lines/reorder`, { line_ids: ids }); }
+      catch (e: any) { alert(e.message); }
+    }
   }
 
   function removeRow(id: number) {
@@ -365,11 +391,20 @@ export default function PlannerPage() {
                 </thead>
                 <tbody>
                   {visibleRows.map((r) => (
-                    <tr key={r.id} className="border-b border-line-soft">
+                    <tr key={r.id}
+                      onDragOver={locked ? undefined : (e) => { e.preventDefault(); if (overId !== r.id) setOverId(r.id); }}
+                      onDrop={locked ? undefined : () => dropOnRow(r.id)}
+                      className={`border-b border-line-soft ${overId === r.id && dragId !== r.id ? "border-t-2 border-t-brand" : ""} ${dragId === r.id ? "opacity-40" : ""}`}>
                       <td className="py-1.5 pr-3">
-                        {locked ? r.item_name : (
-                          <Input value={r.item_name} onChange={(e) => editRow(r.id, { item_name: e.target.value })} className="min-w-[10rem]" />
-                        )}
+                        <div className="flex items-center gap-1">
+                          {!locked && (
+                            <span draggable onDragStart={() => setDragId(r.id)} onDragEnd={() => { setDragId(null); setOverId(null); }}
+                              className="cursor-grab select-none px-0.5 text-ink-muted hover:text-ink" title="Drag to reorder" aria-label="Drag to reorder">⠿</span>
+                          )}
+                          {locked ? <span>{r.item_name}</span> : (
+                            <Input value={r.item_name} onChange={(e) => editRow(r.id, { item_name: e.target.value })} className="min-w-[9rem]" />
+                          )}
+                        </div>
                         {r.needs_review && <Badge tone="warning">review</Badge>}
                       </td>
                       <td className="py-1.5 pr-3">
