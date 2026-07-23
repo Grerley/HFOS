@@ -351,3 +351,29 @@ export const auditEvents = sqliteTable("audit_events", {
   created_at: ts(),
   updated_at: tsu(),
 });
+
+// ── Telegram bot ──────────────────────────────────────────────────────────────
+// Links a Telegram chat to an HFOS user + household so the copilot can answer
+// that user over Telegram with the right tenant scope. One active row per chat.
+export const telegramLinks = sqliteTable("telegram_links", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  chat_id: text("chat_id").notNull().unique(), // Telegram chat id (used to send)
+  telegram_user_id: text("telegram_user_id"),  // Telegram from.id (reference)
+  telegram_username: text("telegram_username"),
+  user_id: integer("user_id").notNull(),
+  household_id: integer("household_id").notNull(),
+  created_at: ts(),
+  updated_at: tsu(),
+});
+
+// Single-use, short-lived codes generated in the web app. Only the SHA-256 hash
+// is stored; the user sends the raw code to the bot to bind their chat.
+export const telegramLinkCodes = sqliteTable("telegram_link_codes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  code_hash: text("code_hash").notNull(),
+  user_id: integer("user_id").notNull(),
+  household_id: integer("household_id").notNull(),
+  expires_at: integer("expires_at").notNull(), // unix seconds
+  used_at: integer("used_at"),
+  created_at: integer("created_at").default(sql`(unixepoch())`).notNull(),
+});

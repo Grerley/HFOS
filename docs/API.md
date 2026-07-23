@@ -90,6 +90,10 @@ Base URL (dev): `http://localhost:8000` · Interactive OpenAPI docs: `/docs` · 
 | POST | `/insights/generate/{period_id}` | run rule-based anomaly/health checks |
 | PATCH | `/insights/{id}/status?new_status=` | acknowledge/dismiss |
 | POST | `/copilot/ask` | `{question, period_id?}` → grounded answer + citations |
+| POST | `/telegram/webhook` | Telegram inbound (public; verified by `X-Telegram-Bot-Api-Secret-Token`) |
+| GET | `/telegram/status` | `{configured, linked, username}` for the active household |
+| POST | `/telegram/link-code` | mint a one-time code to bind a Telegram chat → `{code, deep_link?, expires_at}` |
+| DELETE | `/telegram/link` | unbind the household's Telegram chat |
 
 ## Import
 

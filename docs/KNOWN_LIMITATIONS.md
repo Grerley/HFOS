@@ -58,7 +58,9 @@ a finished commercial product. This document is honest about what is and isn't d
 
 ### P2 — differentiators
 - LLM copilot: the provider seam is **wired and live** (native Workers AI + Claude via AI Gateway,
-  grounded phrasing over calc-engine facts). Remaining: CFO briefings, anomaly detection over
+  grounded phrasing over calc-engine facts), reachable from the web app **and over Telegram**
+  (one-time-code chat linking, per-chat tenant scope; see `docs/TELEGRAM_SETUP.md` — disabled until
+  a bot token is set). Remaining: WhatsApp copilot channel, CFO briefings, anomaly detection over
   history, natural-language scenarios (HFOS-093, 094, 120–124).
 - Open-banking / aggregation sync (HFOS-013).
 - Investment liquidity/risk classification, financial health score.

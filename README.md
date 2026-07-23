@@ -33,7 +33,10 @@ Cloudflare **AI Gateway**, no secret to manage) only once the daily free-tier
 allowance is spent. Other modes: `ai-gateway` (Claude first), `anthropic` (direct
 API, needs `ANTHROPIC_API_KEY`), `workers-ai` (native only), or `rules` (no LLM).
 Every chain ends at the deterministic rule engine, so a spent free tier, unloaded
-credits, or an outage never breaks the copilot.
+credits, or an outage never breaks the copilot. The copilot is reachable from the web
+app and over **Telegram** — link a chat to a household with a one-time code (Settings →
+Connect Telegram); per-chat tenant scoping keeps households isolated. Disabled until a
+bot token is set — see **[docs/TELEGRAM_SETUP.md](docs/TELEGRAM_SETUP.md)**.
 
 **Offline / PWA** — a service worker caches the app shell (network-first, cached-shell
 fallback) and `GET /api` responses per household, so views render with last-synced data
