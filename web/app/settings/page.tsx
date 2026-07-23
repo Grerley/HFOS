@@ -25,6 +25,9 @@ export default function SettingsPage() {
   const [inviteResult, setInviteResult] = useState<{ email_sent: boolean; invite_link: string | null } | null>(null);
   const [reminderMsg, setReminderMsg] = useState<string | null>(null);
   const [reminderBusy, setReminderBusy] = useState(false);
+  const [tg, setTg] = useState<{ configured: boolean; linked: boolean; username: string | null } | null>(null);
+  const [tgCode, setTgCode] = useState<{ code: string; deep_link: string | null; expires_at: number } | null>(null);
+  const [tgBusy, setTgBusy] = useState(false);
   const currency = useCurrency();
 
   const isAdmin = household?.role === "owner" || household?.role === "admin";
@@ -51,7 +54,22 @@ export default function SettingsPage() {
       setLoading(false);
     }
   }
-  useEffect(() => { load(); }, []);
+  async function loadTelegram() {
+    try { setTg(await api.get("/telegram/status")); } catch { /* leave null */ }
+  }
+  useEffect(() => { load(); loadTelegram(); }, []);
+
+  async function genTelegramCode() {
+    setTgBusy(true);
+    try { setTgCode(await api.post("/telegram/link-code", {})); }
+    catch (e: any) { alert(e.message); }
+    finally { setTgBusy(false); }
+  }
+  async function unlinkTelegram() {
+    if (!confirm("Disconnect Telegram? The bot will stop answering until you reconnect.")) return;
+    try { await api.del("/telegram/link"); setTgCode(null); await loadTelegram(); }
+    catch (e: any) { alert(e.message); }
+  }
 
   async function saveHousehold(e: React.FormEvent) {
     e.preventDefault();
@@ -298,6 +316,43 @@ export default function SettingsPage() {
             {reminderBusy ? "Sending…" : "Send me a test reminder"}
           </Button>
           {reminderMsg && <p className="mt-2 text-xs text-ink-muted">{reminderMsg}</p>}
+        </Card>
+
+        <Card title="Connect Telegram" subtitle="Ask your copilot from Telegram">
+          {!tg?.configured ? (
+            <p className="text-sm text-ink-soft">
+              The Telegram bot isn't set up on the server yet. Once an admin adds the bot token, you'll be able to link
+              this household here and chat with your copilot from Telegram.
+            </p>
+          ) : tg.linked ? (
+            <div className="space-y-3">
+              <p className="flex items-center gap-2 text-sm text-ink-soft">
+                <Badge tone="positive">Connected</Badge> This household is linked to Telegram — ask the bot anything about your budget.
+              </p>
+              <Button variant="ghost" onClick={unlinkTelegram}>Disconnect Telegram</Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-ink-soft">
+                Generate a one-time code, then send it to the bot as <span className="font-mono">/link &lt;code&gt;</span>. It expires in 15 minutes.
+              </p>
+              {!tgCode ? (
+                <Button onClick={genTelegramCode} disabled={tgBusy}>{tgBusy ? "Generating…" : "Generate link code"}</Button>
+              ) : (
+                <div className="rounded-lg border border-line-soft p-3 text-sm">
+                  <div>Your code: <span className="font-mono text-base font-semibold tracking-widest">{tgCode.code}</span></div>
+                  {tgCode.deep_link ? (
+                    <a href={tgCode.deep_link} target="_blank" rel="noreferrer" className="mt-2 inline-block font-medium text-brand-dark hover:underline">
+                      Open the bot and connect →
+                    </a>
+                  ) : (
+                    <p className="mt-2 text-xs text-ink-muted">In Telegram, open your bot and send: <span className="font-mono">/link {tgCode.code}</span></p>
+                  )}
+                  <button onClick={genTelegramCode} className="mt-2 block text-xs text-ink-muted hover:underline">Generate a new code</button>
+                </div>
+              )}
+            </div>
+          )}
         </Card>
 
         <Card title="Accounts">

@@ -90,6 +90,16 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
 
+      - name: Sync Telegram secrets (if set)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+        run: |
+          for name in TELEGRAM_BOT_TOKEN TELEGRAM_WEBHOOK_SECRET; do
+            val="${!name}"
+            if [ -n "$val" ]; then printf '%s' "$val" | npx wrangler secret put "$name"; else echo "$name not set — Telegram bot stays disabled."; fi
+          done
+
       - name: Sync WhatsApp secrets (if set)
         env:
           WHATSAPP_PROVIDER: ${{ secrets.WHATSAPP_PROVIDER }}

@@ -20,6 +20,10 @@ export interface Env {
   AI?: unknown;
   // Optional direct-Anthropic provider; set as an encrypted secret to enable.
   ANTHROPIC_API_KEY?: string;
+  // Telegram copilot bot (optional; disabled until the token + webhook secret are set).
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_WEBHOOK_SECRET?: string;
+  TELEGRAM_BOT_USERNAME?: string; // non-secret; only used to build a t.me deep link
   // Transactional email (password reset, invites). Both optional — email stays
   // disabled until RESEND_API_KEY is set. EMAIL_FROM is a non-secret [vars] value.
   RESEND_API_KEY?: string;

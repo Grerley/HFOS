@@ -62,6 +62,14 @@ import {
 } from "./payments";
 import { cashFlowForecast } from "./cashflow";
 import { copilotAnswer } from "./copilot";
+import {
+  createTelegramLinkCode,
+  handleTelegramUpdate,
+  telegramConfigured,
+  telegramLinkStatus,
+  unlinkTelegramForHousehold,
+  verifyTelegramWebhook,
+} from "./telegram";
 
 async function body<T = any>(req: Request): Promise<T> {
   try {
@@ -795,6 +803,39 @@ route("POST", "/copilot/ask", async (req) => {
   const p = await body(req);
   const period = await resolvePeriod(ctx, p.period_id != null ? String(p.period_id) : null);
   return json(await copilotAnswer(getEnv(), ctx.db, ctx.householdId, p.question ?? "", period ? period.id : null));
+});
+
+// ── Telegram bot ──────────────────────────────────────────────────────────────
+// Inbound webhook. Public (no JWT) — authenticated by the shared secret header
+// Telegram echoes back; always returns 200 so Telegram doesn't retry-storm.
+route("POST", "/telegram/webhook", async (req) => {
+  const env = getEnv();
+  if (!verifyTelegramWebhook(req, env)) throw new HttpError(401, "Unauthorized");
+  await handleTelegramUpdate(env, getDb(env), await body(req));
+  return json({ ok: true });
+});
+// Authed: mint a one-time code to connect the caller's household to a chat.
+route("POST", "/telegram/link-code", async (req) => {
+  const ctx = await requireAuth(req);
+  const env = getEnv();
+  if (!telegramConfigured(env)) throw new HttpError(503, "Telegram is not configured yet.");
+  const { code, expires_at } = await createTelegramLinkCode(ctx.db, ctx.userId, ctx.householdId);
+  const username = (env as any).TELEGRAM_BOT_USERNAME as string | undefined;
+  return json({
+    code,
+    expires_at,
+    bot_username: username ?? null,
+    deep_link: username ? `https://t.me/${username}?start=${code}` : null,
+  });
+});
+route("GET", "/telegram/status", async (req) => {
+  const ctx = await requireAuth(req);
+  return json({ configured: telegramConfigured(getEnv()), ...(await telegramLinkStatus(ctx.db, ctx.householdId)) });
+});
+route("DELETE", "/telegram/link", async (req) => {
+  const ctx = await requireAuth(req);
+  await unlinkTelegramForHousehold(ctx.db, ctx.householdId);
+  return json({ ok: true });
 });
 
 // ── Import ────────────────────────────────────────────────────────────────────
