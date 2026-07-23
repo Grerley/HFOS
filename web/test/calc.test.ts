@@ -112,6 +112,30 @@ describe("calculation engine", () => {
     expect(calc.goalProgress(10000, 2500)).toBe(0.25);
   });
 
+  it("goal remaining never goes negative", () => {
+    expect(calc.goalRemainingCents(150000, 50000)).toBe(100000);
+    expect(calc.goalRemainingCents(150000, 200000)).toBe(0);
+  });
+
+  it("goal months-to-target: funded, never, and rounds up", () => {
+    expect(calc.goalMonthsToTarget(150000, 200000, 5000)).toBe(0); // already funded
+    expect(calc.goalMonthsToTarget(150000, 50000, 0)).toBeNull(); // no contribution → never
+    expect(calc.goalMonthsToTarget(150000, 50000, 30000)).toBe(4); // ceil(100000/30000)
+  });
+
+  it("goal monthly shortfall never goes negative", () => {
+    expect(calc.goalMonthlyShortfall(33334, 20000)).toBe(13334);
+    expect(calc.goalMonthlyShortfall(33334, 40000)).toBe(0);
+  });
+
+  it("goal pace assessment", () => {
+    expect(calc.goalPace(1, true, 3, 0, 0)).toBe("complete");
+    expect(calc.goalPace(0.5, false, 0, 1000, 0)).toBe("unscheduled");
+    expect(calc.goalPace(0.5, true, 0, 1000, 5000)).toBe("overdue");
+    expect(calc.goalPace(0.5, true, 6, 5000, 5000)).toBe("on_track");
+    expect(calc.goalPace(0.5, true, 6, 2000, 5000)).toBe("behind");
+  });
+
   it("expected value", () => {
     expect(calc.expectedValue(1000000, 7500)).toBe(750000);
   });

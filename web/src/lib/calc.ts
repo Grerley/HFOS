@@ -269,6 +269,54 @@ export function goalProgress(targetCents: number, currentCents: number): number 
   return round6(Math.min(currentCents / targetCents, 1));
 }
 
+/** Amount still to save to reach the target (never negative). */
+export function goalRemainingCents(targetCents: number, currentCents: number): number {
+  return Math.max(targetCents - currentCents, 0);
+}
+
+/**
+ * Months to reach the target at a given planned monthly contribution.
+ * 0 when already funded; null when it never completes (no positive contribution
+ * while still short) so callers can render "no end date" rather than Infinity.
+ */
+export function goalMonthsToTarget(
+  targetCents: number,
+  currentCents: number,
+  monthlyContributionCents: number,
+): number | null {
+  const gap = goalRemainingCents(targetCents, currentCents);
+  if (gap <= 0) return 0;
+  if (monthlyContributionCents <= 0) return null;
+  return Math.ceil(gap / monthlyContributionCents);
+}
+
+/** How much the planned contribution falls short of what the deadline requires (never negative). */
+export function goalMonthlyShortfall(monthlyRequiredCents: number, monthlyContributionCents: number): number {
+  return Math.max(monthlyRequiredCents - monthlyContributionCents, 0);
+}
+
+/**
+ * Pace assessment: is the goal on track to hit its target date at the current
+ * planned contribution?
+ *  - complete    already funded
+ *  - unscheduled no target date, so pace can't be judged
+ *  - overdue     target date has passed but it isn't funded
+ *  - on_track    planned contribution ≥ what the deadline requires
+ *  - behind      planned contribution < what the deadline requires
+ */
+export function goalPace(
+  progress: number,
+  hasTargetDate: boolean,
+  monthsRemaining: number,
+  monthlyContributionCents: number,
+  monthlyRequiredCents: number,
+): "complete" | "unscheduled" | "overdue" | "on_track" | "behind" {
+  if (progress >= 1) return "complete";
+  if (!hasTargetDate) return "unscheduled";
+  if (monthsRemaining <= 0) return "overdue";
+  return monthlyContributionCents >= monthlyRequiredCents ? "on_track" : "behind";
+}
+
 // ── Tithe ────────────────────────────────────────────────────────────────────
 export const TITHE_RATE_BP = 1000; // 10% in basis points
 

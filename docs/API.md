@@ -68,7 +68,7 @@ Base URL (dev): `http://localhost:8000` · Interactive OpenAPI docs: `/docs` · 
 
 | Method | Path | Notes |
 |---|---|---|
-| GET/POST | `/goals`, PATCH `/goals/{id}` | goals with computed progress + monthly requirement |
+| GET/POST | `/goals`, PATCH/DELETE `/goals/{id}` | goals with computed progress, amount remaining, monthly requirement & shortfall, projected finish date, and pace (on_track/behind/overdue/…) |
 | GET/POST | `/scenarios` | list / create+run a scenario |
 | POST | `/scenarios/{id}/run` | re-run |
 | GET | `/scenarios/{id}/compare` | baseline vs projected + deltas |

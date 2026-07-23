@@ -114,13 +114,29 @@ function monthsBetween(target: string | null): number {
   const now = new Date();
   return Math.max((t.getFullYear() - now.getFullYear()) * 12 + (t.getMonth() - now.getMonth()), 0);
 }
+/** Today + n months as a YYYY-MM-DD string, or null when n is unknown. */
+function monthsFromNow(monthsAhead: number | null): string | null {
+  if (monthsAhead == null) return null;
+  const d = new Date();
+  d.setMonth(d.getMonth() + monthsAhead);
+  return d.toISOString().slice(0, 10);
+}
+
 function enrichGoal(g: typeof goals.$inferSelect) {
   const months = monthsBetween(g.target_date);
+  const progress = calc.goalProgress(g.target_amount_cents, g.current_amount_cents);
+  const monthly_required_cents = calc.goalMonthlyRequirement(g.target_amount_cents, g.current_amount_cents, months);
+  const projected_months = calc.goalMonthsToTarget(g.target_amount_cents, g.current_amount_cents, g.monthly_contribution_cents);
   return {
     ...g,
-    progress: calc.goalProgress(g.target_amount_cents, g.current_amount_cents),
+    progress,
     months_remaining: months,
-    monthly_required_cents: calc.goalMonthlyRequirement(g.target_amount_cents, g.current_amount_cents, months),
+    monthly_required_cents,
+    remaining_cents: calc.goalRemainingCents(g.target_amount_cents, g.current_amount_cents),
+    monthly_shortfall_cents: calc.goalMonthlyShortfall(monthly_required_cents, g.monthly_contribution_cents),
+    projected_months,
+    projected_date: monthsFromNow(projected_months),
+    pace: calc.goalPace(progress, !!g.target_date, months, g.monthly_contribution_cents, monthly_required_cents),
   };
 }
 
@@ -665,6 +681,12 @@ route("PATCH", "/goals/:id", async (req, params) => {
   const g = await getScoped(ctx.db.select().from(goals).where(eq(goals.id, Number(params.id))), ctx.householdId, "Goal");
   await ctx.db.update(goals).set(await body(req)).where(eq(goals.id, g.id));
   return json(enrichGoal((await ctx.db.select().from(goals).where(eq(goals.id, g.id))).at(0)!));
+});
+route("DELETE", "/goals/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const g = await getScoped(ctx.db.select().from(goals).where(eq(goals.id, Number(params.id))), ctx.householdId, "Goal");
+  await ctx.db.delete(goals).where(eq(goals.id, g.id));
+  return json({ ok: true });
 });
 
 // ── Scenarios ─────────────────────────────────────────────────────────────────

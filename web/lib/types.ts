@@ -142,9 +142,15 @@ export interface Goal {
   monthly_contribution_cents: number;
   priority: number;
   status: string;
+  notes?: string | null;
   progress: number;
   months_remaining: number;
   monthly_required_cents: number;
+  remaining_cents: number;
+  monthly_shortfall_cents: number;
+  projected_months: number | null;
+  projected_date?: string | null;
+  pace: "complete" | "unscheduled" | "overdue" | "on_track" | "behind";
 }
 
 export interface Property {
