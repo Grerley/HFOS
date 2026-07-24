@@ -17,7 +17,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { DB, Env } from "../db/client";
 import { budgetPeriods, telegramLinkCodes, telegramLinks } from "../db/schema";
 import { contentHash } from "../lib/hash";
-import { copilotAnswer } from "./copilot";
+import { copilotAnswer, loadHistory, pruneHistory, saveTurn } from "./copilot";
 
 const CODE_TTL_SEC = 15 * 60; // 15 minutes
 // Unambiguous alphabet (no 0/O/1/I) for a short, human-typeable code.
@@ -189,12 +189,15 @@ export async function handleTelegramUpdate(env: Env, db: DB, update: any): Promi
       return;
     }
     const periodId = await latestPeriodId(db, link.household_id);
-    if (periodId == null) {
-      await sendTelegram(env, chatId, "You don't have a budget period yet — create one in the app and I'll be able to answer questions about it.");
-      return;
-    }
-    const result: any = await copilotAnswer(env, db, link.household_id, text, periodId);
-    await sendTelegram(env, chatId, result?.answer || "I couldn't work that out just now — please try again.");
+    // Per-chat conversation memory so the bot holds a real conversation.
+    const sessionKey = `tg:${chatId}`;
+    const history = await loadHistory(db, sessionKey);
+    const result: any = await copilotAnswer(env, db, link.household_id, text, periodId, history);
+    const answer = result?.answer || "I couldn't work that out just now — please try again.";
+    await saveTurn(db, link.household_id, sessionKey, "user", text);
+    await saveTurn(db, link.household_id, sessionKey, "assistant", answer);
+    await pruneHistory(db, sessionKey);
+    await sendTelegram(env, chatId, answer);
   } catch {
     await sendTelegram(env, chatId, "Something went wrong handling that. Please try again in a moment.");
   }

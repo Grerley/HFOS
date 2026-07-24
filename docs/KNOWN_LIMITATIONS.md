@@ -57,11 +57,16 @@ a finished commercial product. This document is honest about what is and isn't d
 12. Multi-household switcher.
 
 ### P2 — differentiators
-- LLM copilot: the provider seam is **wired and live** (native Workers AI + Claude via AI Gateway,
-  grounded phrasing over calc-engine facts), reachable from the web app **and over Telegram**
-  (one-time-code chat linking, per-chat tenant scope; see `docs/TELEGRAM_SETUP.md` — disabled until
-  a bot token is set). Remaining: WhatsApp copilot channel, CFO briefings, anomaly detection over
-  history, natural-language scenarios (HFOS-093, 094, 120–124).
+- LLM copilot is **agentic**: Claude (via AI Gateway, Sonnet by default) drives a set of read-only,
+  engine-backed tools (periods, financials, trends, comparisons, budget lines, payments, net worth,
+  goals, properties, rule insights) to investigate the real data over multiple steps and answer
+  grounded in calc-engine figures — with per-user/per-chat **conversation memory**. Reachable from the
+  web app and over Telegram (per-chat tenant scope). A scheduled **proactive analyst**
+  (`/insights/analyze-all`, weekly) records the most important trends/risks/opportunities as Insights
+  and pushes a Telegram digest. The agentic path needs a capable model (Claude); it degrades to
+  single-shot phrasing then the rule engine if unavailable. Follow-ups: what-if/scenario and
+  cash-flow tools for the agent, streaming responses, WhatsApp channel, natural-language scenarios
+  (HFOS-093, 094, 120–124).
 - Open-banking / aggregation sync (HFOS-013).
 - Investment liquidity/risk classification, financial health score.
 - Document vault (receipts/statements) with OCR extraction.
