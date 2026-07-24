@@ -87,13 +87,40 @@ export async function createTelegramLinkCode(db: DB, userId: number, householdId
   return { code, expires_at };
 }
 
-/** Is this user's household already linked to a Telegram chat? */
+/**
+ * All Telegram chats linked to a household. A household can connect several
+ * chats (e.g. both partners link their own phone); each is bound independently.
+ */
 export async function telegramLinkStatus(db: DB, householdId: number) {
-  const row = (await db.select().from(telegramLinks).where(eq(telegramLinks.household_id, householdId))).at(0);
-  return { linked: !!row, username: row?.telegram_username ?? null };
+  const rows = await db.select().from(telegramLinks)
+    .where(eq(telegramLinks.household_id, householdId))
+    .orderBy(telegramLinks.created_at);
+  return {
+    linked: rows.length > 0,
+    count: rows.length,
+    chats: rows.map((r) => ({
+      chat_id: r.chat_id,
+      username: r.telegram_username ?? null,
+      linked_at: r.created_at,
+    })),
+    username: rows[0]?.telegram_username ?? null, // back-compat (first chat)
+  };
 }
 
-/** Remove any Telegram binding for a household. */
+/** Chat ids to broadcast to for a household (proactive digests, alerts). */
+export async function telegramChatsForHousehold(db: DB, householdId: number): Promise<string[]> {
+  const rows = await db.select().from(telegramLinks).where(eq(telegramLinks.household_id, householdId));
+  return rows.map((r) => r.chat_id);
+}
+
+/** Remove one chat's binding, scoped to the household (so a member can only
+ * disconnect chats belonging to their own household). */
+export async function unlinkTelegramChat(db: DB, householdId: number, chatId: string): Promise<void> {
+  await db.delete(telegramLinks)
+    .where(and(eq(telegramLinks.household_id, householdId), eq(telegramLinks.chat_id, chatId)));
+}
+
+/** Remove every Telegram binding for a household (disconnect all). */
 export async function unlinkTelegramForHousehold(db: DB, householdId: number): Promise<void> {
   await db.delete(telegramLinks).where(eq(telegramLinks.household_id, householdId));
 }

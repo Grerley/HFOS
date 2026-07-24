@@ -17,7 +17,6 @@ import {
   properties,
   propertyCashFlows,
   scenarios,
-  telegramLinks,
   transactions,
   users,
 } from "../db/schema";
@@ -68,8 +67,10 @@ import {
   createTelegramLinkCode,
   handleTelegramUpdate,
   sendTelegram,
+  telegramChatsForHousehold,
   telegramConfigured,
   telegramLinkStatus,
+  unlinkTelegramChat,
   unlinkTelegramForHousehold,
   verifyTelegramWebhook,
 } from "./telegram";
@@ -844,10 +845,11 @@ route("POST", "/insights/analyze-all", async (req) => {
       const r = await runInsightAnalyst(env, db, hh.id);
       results.push({ household_id: hh.id, recorded: r.recorded });
       if (r.recorded > 0) {
-        const link = (await db.select().from(telegramLinks).where(eq(telegramLinks.household_id, hh.id))).at(0);
-        if (link) {
+        const chats = await telegramChatsForHousehold(db, hh.id);
+        if (chats.length) {
           const top = r.summaries.slice(0, 3).map((s) => `• ${s}`).join("\n");
-          await sendTelegram(env, link.chat_id, `🔎 I reviewed your finances and found ${r.recorded} thing${r.recorded === 1 ? "" : "s"} worth a look:\n${top}\n\nAsk me about any of them, or open HFOS → Insights.`);
+          const digest = `🔎 I reviewed your finances and found ${r.recorded} thing${r.recorded === 1 ? "" : "s"} worth a look:\n${top}\n\nAsk me about any of them, or open HFOS → Insights.`;
+          for (const chatId of chats) await sendTelegram(env, chatId, digest);
         }
       }
     } catch {
@@ -882,11 +884,20 @@ route("POST", "/telegram/link-code", async (req) => {
 });
 route("GET", "/telegram/status", async (req) => {
   const ctx = await requireAuth(req);
-  return json({ configured: telegramConfigured(getEnv()), ...(await telegramLinkStatus(ctx.db, ctx.householdId)) });
+  const env = getEnv();
+  const botUsername = ((env as any).TELEGRAM_BOT_USERNAME as string | undefined) ?? null;
+  return json({
+    configured: telegramConfigured(env),
+    bot_username: botUsername,
+    ...(await telegramLinkStatus(ctx.db, ctx.householdId)),
+  });
 });
 route("DELETE", "/telegram/link", async (req) => {
   const ctx = await requireAuth(req);
-  await unlinkTelegramForHousehold(ctx.db, ctx.householdId);
+  // ?chat_id=… disconnects one linked device; omitted → disconnect all.
+  const chatId = qp(req, "chat_id");
+  if (chatId) await unlinkTelegramChat(ctx.db, ctx.householdId, chatId);
+  else await unlinkTelegramForHousehold(ctx.db, ctx.householdId);
   return json({ ok: true });
 });
 
