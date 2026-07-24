@@ -296,6 +296,49 @@ export async function runAgent(env: Env, db: DB, householdId: number, cfg: Agent
   return { answer: text, trace };
 }
 
+/**
+ * Introspection helper. Runs one raw model call (with tools) plus a full agent
+ * loop and reports the shapes/errors — so we can see why the agentic path may be
+ * degrading without access to gateway/Worker logs. Triggered via the "/diag"
+ * question. Contains no secrets.
+ */
+export async function copilotDiag(env: Env, db: DB, householdId: number): Promise<Record<string, unknown>> {
+  const provider = (env.HFOS_COPILOT_PROVIDER ?? "rules").toLowerCase();
+  const transport = pickTransport(env, provider);
+  const out: Record<string, unknown> = { provider, transport: transport?.kind ?? null, model: (transport as any)?.model ?? null, has_AI_binding: !!(env as any).AI, gateway_id: env.HFOS_AI_GATEWAY_ID ?? null };
+  if (!transport) { out.note = "No capable transport — need the AI binding (ai-gateway) or ANTHROPIC_API_KEY."; return out; }
+
+  // Step 1 — one raw round trip with tools, to inspect the response shape.
+  try {
+    const body: any = { max_tokens: 300, system: "Test. Call the list_periods tool.", messages: [{ role: "user", content: "List the budget periods." }], tools: COPILOT_TOOLS };
+    let raw: any;
+    if (transport.kind === "ai-gateway") {
+      raw = await withTimeout((env as any).AI.run(transport.model, body, { gateway: { id: transport.gatewayId } }), AGENT_CALL_TIMEOUT_MS);
+    } else {
+      const res = await withTimeout(fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": (env as any).ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" }, body: JSON.stringify({ model: transport.model, ...body }) }), AGENT_CALL_TIMEOUT_MS);
+      out.http_status = res.status;
+      raw = await res.json();
+    }
+    out.raw_top_keys = raw && typeof raw === "object" ? Object.keys(raw) : typeof raw;
+    out.raw_stop_reason = raw?.stop_reason ?? null;
+    out.raw_content_types = Array.isArray(raw?.content) ? raw.content.map((b: any) => b?.type) : null;
+    out.raw_snippet = JSON.stringify(raw).slice(0, 1400);
+  } catch (e: any) {
+    out.step1_error = String(e?.message ?? e);
+  }
+
+  // Step 2 — full agent loop, to see whether it produces a grounded answer.
+  try {
+    const r = await runAgent(env, db, householdId, { system: AGENT_SYSTEM, messages: [{ role: "user", content: "How many budget periods do we have? Use a tool to check." }], tools: COPILOT_TOOLS as unknown as any[], transport });
+    out.agent_answer_len = r.answer.length;
+    out.agent_answer_preview = r.answer.slice(0, 300);
+    out.agent_tools_used = r.trace.map((t) => t.tool);
+  } catch (e: any) {
+    out.step2_error = String(e?.message ?? e);
+  }
+  return out;
+}
+
 /** Pick the capable transport for agentic reasoning (needs Claude — the free model can't tool-use). */
 export function pickTransport(env: Env, provider: string): Transport | null {
   const hasAI = !!(env as any).AI;
@@ -358,6 +401,13 @@ export async function copilotAnswer(
   periodId: number | null,
   history: ConvMessage[] = [],
 ) {
+  // Hidden diagnostic: type "/diag" in the copilot to see why the agentic path
+  // may be degrading (transport, raw response shape, and any error).
+  if (question.trim().toLowerCase() === "/diag") {
+    const diag = await copilotDiag(env, db, householdId).catch((e: any) => ({ error: String(e?.message ?? e) }));
+    return { answer: "```json\n" + JSON.stringify(diag, null, 2) + "\n```", provider: "diag", matched_intent: "diag", grounded: false, citations: [] };
+  }
+
   const rule = await answerQuestion(db, householdId, question, periodId);
   const provider = (env.HFOS_COPILOT_PROVIDER ?? "rules").toLowerCase();
   if (provider === "rules") return rule;
