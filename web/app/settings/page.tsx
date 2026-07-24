@@ -25,7 +25,7 @@ export default function SettingsPage() {
   const [inviteResult, setInviteResult] = useState<{ email_sent: boolean; invite_link: string | null } | null>(null);
   const [reminderMsg, setReminderMsg] = useState<string | null>(null);
   const [reminderBusy, setReminderBusy] = useState(false);
-  const [tg, setTg] = useState<{ configured: boolean; linked: boolean; username: string | null } | null>(null);
+  const [tg, setTg] = useState<{ configured: boolean; linked: boolean; bot_username?: string | null; count?: number; chats?: { chat_id: string; username: string | null; linked_at?: number }[]; username: string | null } | null>(null);
   const [tgCode, setTgCode] = useState<{ code: string; deep_link: string | null; expires_at: number } | null>(null);
   const [tgBusy, setTgBusy] = useState(false);
   const currency = useCurrency();
@@ -65,8 +65,13 @@ export default function SettingsPage() {
     catch (e: any) { alert(e.message); }
     finally { setTgBusy(false); }
   }
-  async function unlinkTelegram() {
-    if (!confirm("Disconnect Telegram? The bot will stop answering until you reconnect.")) return;
+  async function unlinkTelegramChat(chatId: string, label: string) {
+    if (!confirm(`Disconnect ${label}? That device will stop answering until it's reconnected.`)) return;
+    try { await api.del(`/telegram/link?chat_id=${encodeURIComponent(chatId)}`); await loadTelegram(); }
+    catch (e: any) { alert(e.message); }
+  }
+  async function unlinkAllTelegram() {
+    if (!confirm("Disconnect ALL Telegram devices? Nobody will get answers or alerts until they reconnect.")) return;
     try { await api.del("/telegram/link"); setTgCode(null); await loadTelegram(); }
     catch (e: any) { alert(e.message); }
   }
@@ -318,39 +323,71 @@ export default function SettingsPage() {
           {reminderMsg && <p className="mt-2 text-xs text-ink-muted">{reminderMsg}</p>}
         </Card>
 
-        <Card title="Connect Telegram" subtitle="Ask your copilot from Telegram">
+        <Card title="Connect Telegram" subtitle="Ask your copilot from Telegram — each person can link their own phone">
           {!tg?.configured ? (
             <p className="text-sm text-ink-soft">
               The Telegram bot isn't set up on the server yet. Once an admin adds the bot token, you'll be able to link
               this household here and chat with your copilot from Telegram.
             </p>
-          ) : tg.linked ? (
-            <div className="space-y-3">
-              <p className="flex items-center gap-2 text-sm text-ink-soft">
-                <Badge tone="positive">Connected</Badge> This household is linked to Telegram — ask the bot anything about your budget.
-              </p>
-              <Button variant="ghost" onClick={unlinkTelegram}>Disconnect Telegram</Button>
-            </div>
           ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-ink-soft">
-                Generate a one-time code, then send it to the bot as <span className="font-mono">/link &lt;code&gt;</span>. It expires in 15 minutes.
-              </p>
-              {!tgCode ? (
-                <Button onClick={genTelegramCode} disabled={tgBusy}>{tgBusy ? "Generating…" : "Generate link code"}</Button>
-              ) : (
-                <div className="rounded-lg border border-line-soft p-3 text-sm">
-                  <div>Your code: <span className="font-mono text-base font-semibold tracking-widest">{tgCode.code}</span></div>
-                  {tgCode.deep_link ? (
-                    <a href={tgCode.deep_link} target="_blank" rel="noreferrer" className="mt-2 inline-block font-medium text-brand-dark hover:underline">
-                      Open the bot and connect →
-                    </a>
-                  ) : (
-                    <p className="mt-2 text-xs text-ink-muted">In Telegram, open your bot and send: <span className="font-mono">/link {tgCode.code}</span></p>
+            <div className="space-y-4">
+              {tg.chats && tg.chats.length > 0 && (
+                <div className="space-y-2">
+                  <p className="flex items-center gap-2 text-sm text-ink-soft">
+                    <Badge tone="positive">Connected</Badge>
+                    {tg.chats.length === 1 ? "1 device is linked" : `${tg.chats.length} devices are linked`} — each gets answers and proactive alerts.
+                  </p>
+                  {tg.chats.map((c) => {
+                    const label = c.username ? `@${c.username}` : `chat …${c.chat_id.slice(-4)}`;
+                    return (
+                      <div key={c.chat_id} className="flex items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
+                        <span className="min-w-0 truncate">{label}</span>
+                        <button onClick={() => unlinkTelegramChat(c.chat_id, label)} title="Disconnect this device" className="shrink-0 rounded px-1.5 text-ink-muted hover:text-negative">✕</button>
+                      </div>
+                    );
+                  })}
+                  {tg.chats.length > 1 && (
+                    <button onClick={unlinkAllTelegram} className="text-xs text-ink-muted hover:underline">Disconnect all devices</button>
                   )}
-                  <button onClick={genTelegramCode} className="mt-2 block text-xs text-ink-muted hover:underline">Generate a new code</button>
                 </div>
               )}
+
+              <div className="space-y-3 border-t border-line-soft pt-3">
+                <p className="text-sm font-medium text-ink">
+                  {tg.chats && tg.chats.length > 0 ? "Connect another phone" : "Connect your phone"}
+                </p>
+                <ol className="ml-4 list-decimal space-y-1.5 text-sm text-ink-soft">
+                  <li>Tap <span className="font-medium text-ink">Generate link code</span> below.</li>
+                  <li>
+                    Open Telegram and start a chat with{" "}
+                    {tg.bot_username
+                      ? <a href={`https://t.me/${tg.bot_username}`} target="_blank" rel="noreferrer" className="font-mono text-brand-dark hover:underline">@{tg.bot_username}</a>
+                      : <span className="font-medium text-ink">our HFOS bot</span>}
+                    {" "}(or just tap the <span className="font-medium text-ink">Open the bot and connect</span> link that appears with your code).
+                  </li>
+                  <li>Send <span className="font-mono">/link &lt;code&gt;</span> to the bot. It replies <span className="text-positive">✅ Connected</span>.</li>
+                  <li>Ask anything, e.g. <span className="italic">“how much are we spending on groceries?”</span></li>
+                </ol>
+                <p className="text-xs text-ink-muted">
+                  Codes are single-use and expire in 15 minutes.
+                  {tg.chats && tg.chats.length > 0 && " Your partner can do steps 1–3 from their own login, or use a code you generate here — either way it links to this same budget."}
+                </p>
+                {!tgCode ? (
+                  <Button onClick={genTelegramCode} disabled={tgBusy}>{tgBusy ? "Generating…" : "Generate link code"}</Button>
+                ) : (
+                  <div className="rounded-lg border border-line-soft p-3 text-sm">
+                    <div>Your code: <span className="font-mono text-base font-semibold tracking-widest">{tgCode.code}</span></div>
+                    {tgCode.deep_link ? (
+                      <a href={tgCode.deep_link} target="_blank" rel="noreferrer" className="mt-2 inline-block font-medium text-brand-dark hover:underline">
+                        Open the bot and connect →
+                      </a>
+                    ) : (
+                      <p className="mt-2 text-xs text-ink-muted">In Telegram, open your bot and send: <span className="font-mono">/link {tgCode.code}</span></p>
+                    )}
+                    <button onClick={genTelegramCode} className="mt-2 block text-xs text-ink-muted hover:underline">Generate a new code</button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </Card>

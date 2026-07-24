@@ -66,6 +66,9 @@ no `last_error_message`). To stop the bot: `deleteWebhook`.
 ## Notes & limits
 - Answers use the current copilot provider (`auto` by default: free Workers AI → Claude spillover).
 - Bot replies are plain text (no formatting to escape). Long answers are capped at Telegram's 4096 chars.
-- One binding per chat; re-linking replaces it. `/unlink` (or Settings → Disconnect) removes it.
+- A household can link **several chats** — each partner links their own phone with their own
+  one-time code, and every linked chat gets answers and proactive digests. One binding per
+  chat; re-linking a chat replaces it. `/unlink` (or Settings → the ✕ next to a device) removes
+  a single chat; Settings → "Disconnect all devices" removes them all.
 - Financial figures traverse Telegram's cloud (bot chats are not end-to-end encrypted) — a
   deliberate trade-off for convenience, same class of consideration as any messaging channel.
