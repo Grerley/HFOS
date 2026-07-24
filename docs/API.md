@@ -89,7 +89,10 @@ Base URL (dev): `http://localhost:8000` · Interactive OpenAPI docs: `/docs` · 
 | GET | `/insights` | open insights |
 | POST | `/insights/generate/{period_id}` | run rule-based anomaly/health checks |
 | PATCH | `/insights/{id}/status?new_status=` | acknowledge/dismiss |
-| POST | `/copilot/ask` | `{question, period_id?}` → grounded answer + citations |
+| POST | `/copilot/ask` | `{question, period_id?}` → agentic, grounded answer; the model uses read-only engine tools + per-user conversation memory. Returns `{answer, provider, citations (tools consulted), grounded}` |
+| POST | `/copilot/reset` | clear the caller's copilot conversation memory |
+| POST | `/insights/analyze` | run the proactive analyst for the active household now (managing roles) → `{recorded, summaries}` |
+| POST | `/insights/analyze-all` | scheduled proactive analysis across all households (cron-authenticated); records insights + pushes a Telegram digest to linked chats |
 | POST | `/telegram/webhook` | Telegram inbound (public; verified by `X-Telegram-Bot-Api-Secret-Token`) |
 | GET | `/telegram/status` | `{configured, linked, username}` for the active household |
 | POST | `/telegram/link-code` | mint a one-time code to bind a Telegram chat → `{code, deep_link?, expires_at}` |

@@ -377,3 +377,15 @@ export const telegramLinkCodes = sqliteTable("telegram_link_codes", {
   used_at: integer("used_at"),
   created_at: integer("created_at").default(sql`(unixepoch())`).notNull(),
 });
+
+// Rolling conversation memory for the agentic copilot. session_key namespaces a
+// thread: "web:<userId>" or "tg:<chatId>". Only user/assistant text is kept
+// (tool traces are re-derived fresh each turn), windowed to the last N turns.
+export const copilotMessages = sqliteTable("copilot_messages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  household_id: integer("household_id").notNull(),
+  session_key: text("session_key").notNull(),
+  role: text("role").notNull(), // 'user' | 'assistant'
+  content: text("content").notNull(),
+  created_at: integer("created_at").default(sql`(unixepoch())`).notNull(),
+});

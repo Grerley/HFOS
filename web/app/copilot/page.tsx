@@ -7,18 +7,19 @@ import { api } from "@/lib/api";
 interface Turn { q: string; a: string; intent: string; provider: string; citations: any[]; degraded?: boolean; }
 
 const PROVIDER_LABEL: Record<string, string> = {
+  "ai-gateway": "Claude",
   "workers-ai": "Workers AI",
   anthropic: "Claude",
   rules: "rule engine",
 };
 
 const SUGGESTIONS = [
-  "Can we afford this decision?",
-  "What changed this month?",
-  "Why are we over budget?",
-  "Are we on track for our savings goals?",
-  "Which property is underperforming?",
-  "What should we do with a bonus?",
+  "How has our savings rate changed over the last 6 months?",
+  "What's driving the growth in our expenses?",
+  "Are any of our goals slipping, and by how much?",
+  "Compare this month to last month.",
+  "Which property is underperforming, and why?",
+  "What trends should I be worried about?",
 ];
 
 export default function CopilotPage() {
@@ -72,10 +73,11 @@ export default function CopilotPage() {
         ))}
         {!turns.length && (
           <p className="text-sm text-ink-muted">
-            Ask in plain language. The copilot phrases its answer with an LLM (Cloudflare Workers AI by
-            default), but every figure it quotes is computed by the deterministic calculation engine and
-            passed in as grounded facts — the model never does the maths. If the model is unavailable, it
-            falls back to the explainable rule engine automatically.
+            Ask in plain language. The copilot investigates your real data — periods, trends,
+            comparisons, goals, property, payments and net worth — using read-only tools, then answers
+            and points out trends, risks and opportunities. Every figure it quotes is computed by the
+            deterministic engine (it never does the maths itself), and it remembers the conversation. If
+            the model is unavailable it falls back to the explainable rule engine automatically.
           </p>
         )}
       </div>

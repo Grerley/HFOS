@@ -25,15 +25,17 @@ Cloudflare Worker (OpenNext)
 └── D1            hfos-db (integer-cents money, JSON columns, time-travel restore)
 ```
 
-**Copilot** phrases answers with an LLM but every figure it quotes is computed by the
-deterministic engine and handed to the model as grounded facts; the model never does
-arithmetic. By default (`HFOS_COPILOT_PROVIDER=auto`) it is **cost-first**: the free
-native **Workers AI** model handles every request and spills over to **Claude** (via
-Cloudflare **AI Gateway**, no secret to manage) only once the daily free-tier
-allowance is spent. Other modes: `ai-gateway` (Claude first), `anthropic` (direct
-API, needs `ANTHROPIC_API_KEY`), `workers-ai` (native only), or `rules` (no LLM).
-Every chain ends at the deterministic rule engine, so a spent free tier, unloaded
-credits, or an outage never breaks the copilot. The copilot is reachable from the web
+**Copilot** is an **agentic analyst**: Claude (via Cloudflare **AI Gateway**, no secret
+to manage) drives a set of **read-only, engine-backed tools** — periods, financials,
+trends, period comparisons, budget lines, payments, net worth, goals, properties — to
+investigate the real budget over multiple steps and answer grounded in calc-engine
+figures. It never does arithmetic itself (every number comes from the deterministic
+engine), keeps **per-user/per-chat conversation memory**, and is reachable from the web
+app and over **Telegram**. A weekly **proactive analyst** surfaces trends, risks and
+opportunities you haven't asked about, as Insights and a Telegram digest. The agentic
+brain needs a capable model (Claude); it degrades to single-shot phrasing and then the
+deterministic rule engine if the model is unavailable, so it never breaks. Provider is
+configurable via `HFOS_COPILOT_PROVIDER` / `HFOS_COPILOT_MODEL`. The copilot is reachable from the web
 app and over **Telegram** — link a chat to a household with a one-time code (Settings →
 Connect Telegram); per-chat tenant scoping keeps households isolated. Disabled until a
 bot token is set — see **[docs/TELEGRAM_SETUP.md](docs/TELEGRAM_SETUP.md)**.

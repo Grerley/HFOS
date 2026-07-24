@@ -8,13 +8,14 @@
  * model is unavailable, errors, or times out, we fall back to the rule-based
  * answer, so the copilot is always at least as good as the deterministic engine.
  */
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, lte } from "drizzle-orm";
 import type { DB, Env } from "../db/client";
-import { accounts, budgetPeriods, goals as goalsTable, households } from "../db/schema";
+import { accounts, budgetPeriods, copilotMessages, goals as goalsTable, households } from "../db/schema";
 import * as calc from "../lib/calc";
 import { loadLinesForCalc } from "./services";
 import { periodSettlement } from "./payments";
 import { answerQuestion } from "./insights";
+import { COPILOT_TOOLS, executeCopilotTool, type ToolContext } from "./copilotTools";
 
 const LIABILITY_TYPES = new Set(["loan", "credit_card", "bond"]);
 const LLM_TIMEOUT_MS = 9000;
@@ -195,6 +196,141 @@ async function runAnthropic(env: Env, model: string, facts: unknown, question: s
   return text;
 }
 
+// ── Agentic layer ─────────────────────────────────────────────────────────────
+// The model drives: it calls read-only, engine-backed tools to gather exactly
+// the data it needs, reasons over multiple steps, then answers — grounded in the
+// figures the tools return. Numbers still come only from the deterministic engine.
+
+const AGENT_TIMEOUT_MS = 30_000; // whole loop budget
+const AGENT_CALL_TIMEOUT_MS = 20_000; // single model round trip
+const AGENT_MAX_ITERS = 6;
+const AGENT_MAX_TOKENS = 1500;
+
+export const AGENT_SYSTEM = `You are HFOS, a sharp, warm personal-CFO copilot for a South African household.
+You have READ-ONLY tools that return figures already computed by a deterministic engine.
+
+How to work:
+- Investigate before answering. Call tools to get real numbers; for anything analytical, prefer trends and period comparisons over a single snapshot. Call list_periods first if you need a period id.
+- Ground every figure in a tool result. Quote money and percentages EXACTLY as the tools return them (they are pre-formatted strings). Never invent, estimate, or recompute a number — if you need a figure you don't have, call a tool.
+- Be genuinely useful: answer the question, then surface the "why" and any notable trend, risk or opportunity the user may not have spotted. Stay concise and skimmable — short paragraphs; a few plain bullet points ("- ") are fine.
+- South African terminology (ZAR, bond, debit order, levies). Never give regulated financial advice; frame suggestions as options to consider.
+- You cannot change any data — you only read and analyse. If data is missing, say so plainly.`;
+
+export type ConvMessage = { role: "user" | "assistant"; content: any };
+export type Transport = { kind: "ai-gateway"; model: string; gatewayId: string } | { kind: "anthropic"; model: string };
+
+export interface AgentRun {
+  system: string;
+  messages: ConvMessage[];
+  tools: any[];
+  transport: Transport;
+  onInsight?: ToolContext["onInsight"];
+  maxIters?: number;
+}
+
+/** One Messages-API round trip, via AI Gateway binding (no key) or direct Anthropic. */
+async function callMessages(env: Env, transport: Transport, system: string, messages: ConvMessage[], tools: any[]): Promise<{ content: any[]; stop_reason: string }> {
+  const body: any = { max_tokens: AGENT_MAX_TOKENS, system, messages };
+  if (tools.length) body.tools = tools;
+
+  let out: any;
+  if (transport.kind === "ai-gateway") {
+    const ai: any = (env as any).AI;
+    out = await withTimeout(ai.run(transport.model, body, { gateway: { id: transport.gatewayId } }), AGENT_CALL_TIMEOUT_MS);
+  } else {
+    const key = (env as any).ANTHROPIC_API_KEY as string;
+    const res = await withTimeout(
+      fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ model: transport.model, ...body }),
+      }),
+      AGENT_CALL_TIMEOUT_MS,
+    );
+    if (!res.ok) throw new Error(`anthropic_${res.status}`);
+    out = await res.json();
+  }
+  // Normalise across binding envelopes → the Anthropic message shape.
+  const msg = out?.content ? out : out?.result ?? out?.response ?? out;
+  const content = Array.isArray(msg?.content) ? msg.content : [];
+  return { content, stop_reason: msg?.stop_reason ?? "end_turn" };
+}
+
+/** Run the tool-use loop and return the final text plus the tools it consulted. */
+export async function runAgent(env: Env, db: DB, householdId: number, cfg: AgentRun): Promise<{ answer: string; trace: { tool: string; input: unknown }[] }> {
+  const toolCtx: ToolContext = { env, db, householdId, onInsight: cfg.onInsight };
+  const convo: ConvMessage[] = [...cfg.messages];
+  const trace: { tool: string; input: unknown }[] = [];
+  const started = Date.now();
+  const maxIters = cfg.maxIters ?? AGENT_MAX_ITERS;
+
+  for (let i = 0; i < maxIters; i++) {
+    if (Date.now() - started > AGENT_TIMEOUT_MS) break;
+    const last = i === maxIters - 1;
+    const res = await callMessages(env, cfg.transport, cfg.system, convo, last ? [] : cfg.tools);
+    convo.push({ role: "assistant", content: res.content });
+
+    const toolUses = res.content.filter((b: any) => b?.type === "tool_use");
+    if (res.stop_reason !== "tool_use" || toolUses.length === 0) {
+      const text = res.content.filter((b: any) => b?.type === "text").map((b: any) => b.text).join("").trim();
+      return { answer: text, trace };
+    }
+
+    const results: any[] = [];
+    for (const tu of toolUses) {
+      let result: unknown;
+      try {
+        result = await executeCopilotTool(toolCtx, tu.name, tu.input ?? {});
+      } catch (e: any) {
+        result = { error: String(e?.message ?? e) };
+      }
+      trace.push({ tool: tu.name, input: tu.input });
+      results.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(result) });
+    }
+    convo.push({ role: "user", content: results });
+  }
+
+  // Ran out of iterations — one final, tool-free answer from what we gathered.
+  const res = await callMessages(env, cfg.transport, cfg.system + "\n\nYou have gathered enough data. Give your final answer now using only figures already returned by the tools.", convo, []);
+  const text = res.content.filter((b: any) => b?.type === "text").map((b: any) => b.text).join("").trim();
+  return { answer: text, trace };
+}
+
+/** Pick the capable transport for agentic reasoning (needs Claude — the free model can't tool-use). */
+export function pickTransport(env: Env, provider: string): Transport | null {
+  const hasAI = !!(env as any).AI;
+  const hasKey = !!(env as any).ANTHROPIC_API_KEY;
+  const model = env.HFOS_COPILOT_MODEL;
+  const gatewayId = env.HFOS_AI_GATEWAY_ID || DEFAULT_AI_GATEWAY_ID;
+  if ((provider === "auto" || provider === "ai-gateway") && hasAI) return { kind: "ai-gateway", model: model || DEFAULT_AI_GATEWAY_MODEL, gatewayId };
+  if ((provider === "anthropic" || provider === "auto") && hasKey) return { kind: "anthropic", model: model || DEFAULT_ANTHROPIC_MODEL };
+  return null;
+}
+
+// ── Conversation memory ───────────────────────────────────────────────────────
+const HISTORY_TURNS = 10;
+
+/** Load the last N turns for a session, oldest first, as agent messages. */
+export async function loadHistory(db: DB, sessionKey: string, limit = HISTORY_TURNS): Promise<ConvMessage[]> {
+  const rows = await db.select().from(copilotMessages)
+    .where(eq(copilotMessages.session_key, sessionKey))
+    .orderBy(desc(copilotMessages.id)).limit(limit * 2);
+  return rows.reverse().map((r) => ({ role: r.role === "assistant" ? "assistant" : "user", content: r.content }));
+}
+
+export async function saveTurn(db: DB, householdId: number, sessionKey: string, role: "user" | "assistant", content: string): Promise<void> {
+  await db.insert(copilotMessages).values({ household_id: householdId, session_key: sessionKey, role, content: content.slice(0, 8000) });
+}
+
+/** Best-effort prune so a session's history stays bounded (delete oldest beyond `keep`). */
+export async function pruneHistory(db: DB, sessionKey: string, keep = HISTORY_TURNS * 2): Promise<void> {
+  const newest = await db.select({ id: copilotMessages.id }).from(copilotMessages)
+    .where(eq(copilotMessages.session_key, sessionKey)).orderBy(desc(copilotMessages.id)).limit(keep + 1);
+  if (newest.length <= keep) return;
+  const cutoffId = newest[keep].id; // the (keep+1)-th newest and everything older goes
+  await db.delete(copilotMessages).where(and(eq(copilotMessages.session_key, sessionKey), lte(copilotMessages.id, cutoffId)));
+}
+
 type CopilotAttempt = { name: string; run: (facts: unknown) => Promise<string> };
 
 /**
@@ -214,66 +350,61 @@ type CopilotAttempt = { name: string; run: (facts: unknown) => Promise<string> }
  * a missing credential, spent free tier, unloaded credits, quota cap, or outage
  * never breaks the copilot.
  */
-export async function copilotAnswer(env: Env, db: DB, householdId: number, question: string, periodId: number | null) {
+export async function copilotAnswer(
+  env: Env,
+  db: DB,
+  householdId: number,
+  question: string,
+  periodId: number | null,
+  history: ConvMessage[] = [],
+) {
   const rule = await answerQuestion(db, householdId, question, periodId);
   const provider = (env.HFOS_COPILOT_PROVIDER ?? "rules").toLowerCase();
+  if (provider === "rules") return rule;
 
-  // No period, no LLM value-add — return the deterministic prompt.
-  if (periodId == null || provider === "rules") return rule;
+  // 1) Agentic path (primary): Claude drives read-only tools over ALL the data.
+  //    Needs a capable transport — the free native model can't tool-use reliably.
+  const transport = pickTransport(env, provider);
+  if (transport) {
+    try {
+      const messages: ConvMessage[] = [...history, { role: "user", content: question }];
+      const { answer, trace } = await runAgent(env, db, householdId, {
+        system: AGENT_SYSTEM,
+        messages,
+        tools: COPILOT_TOOLS as unknown as any[],
+        transport,
+      });
+      if (answer) {
+        return { answer, citations: trace, matched_intent: rule.matched_intent, provider: transport.kind, grounded: true };
+      }
+    } catch {
+      // fall through to the simple single-shot phrasing / rules
+    }
+  }
 
+  // 2) Fallback: single-shot phrasing of the current-period facts (never worse than rules).
   const hasAI = !!(env as any).AI;
   const hasKey = !!(env as any).ANTHROPIC_API_KEY;
   const model = env.HFOS_COPILOT_MODEL;
   const gatewayId = env.HFOS_AI_GATEWAY_ID || DEFAULT_AI_GATEWAY_ID;
-
-  // Reusable attempt builders. In "auto" mode HFOS_COPILOT_MODEL tunes the Claude
-  // spill-over tier (the native tier stays on the free default).
-  const nativeAttempt: CopilotAttempt = { name: "workers-ai", run: (f) => runWorkersAI(env, DEFAULT_WORKERS_AI_MODEL, f, question) };
-  const gatewayAttempt: CopilotAttempt = { name: "ai-gateway", run: (f) => runAiGateway(env, model || DEFAULT_AI_GATEWAY_MODEL, gatewayId, f, question) };
-  const anthropicAttempt: CopilotAttempt = { name: "anthropic", run: (f) => runAnthropic(env, model || DEFAULT_ANTHROPIC_MODEL, f, question) };
-
-  const attempts: CopilotAttempt[] = [];
-  if (provider === "auto") {
-    // Cheapest that works, first: free native → Claude spill-over → rules.
-    if (hasAI) {
-      attempts.push(nativeAttempt);
-      attempts.push(gatewayAttempt);
-    } else if (hasKey) {
-      attempts.push(anthropicAttempt);
-    }
-  } else if (provider === "ai-gateway" && hasAI) {
-    attempts.push(gatewayAttempt, nativeAttempt);
-  } else if (provider === "anthropic" && hasKey) {
-    attempts.push(anthropicAttempt);
-    if (hasAI) attempts.push(nativeAttempt);
-  } else if (provider === "workers-ai" && hasAI) {
-    attempts.push({ name: "workers-ai", run: (f) => runWorkersAI(env, model || DEFAULT_WORKERS_AI_MODEL, f, question) });
-  }
-
-  if (attempts.length === 0) return rule; // provider requested but unavailable → safe fallback
-
-  let facts: unknown;
-  try {
-    facts = await buildFacts(db, householdId, periodId);
-  } catch {
-    return rule;
-  }
-
-  for (const attempt of attempts) {
-    try {
-      const answer = await attempt.run(facts);
-      return {
-        answer,
-        citations: [{ source: "calculation_engine", period_id: periodId, facts }],
-        matched_intent: rule.matched_intent,
-        provider: attempt.name,
-        grounded: true,
-      };
-    } catch {
-      // Try the next attempt in the chain.
+  if (periodId != null) {
+    const attempts: CopilotAttempt[] = [];
+    if (hasAI) attempts.push({ name: "workers-ai", run: (f) => runWorkersAI(env, DEFAULT_WORKERS_AI_MODEL, f, question) });
+    if (hasAI) attempts.push({ name: "ai-gateway", run: (f) => runAiGateway(env, model || DEFAULT_AI_GATEWAY_MODEL, gatewayId, f, question) });
+    if (hasKey) attempts.push({ name: "anthropic", run: (f) => runAnthropic(env, model || DEFAULT_ANTHROPIC_MODEL, f, question) });
+    if (attempts.length) {
+      let facts: unknown;
+      try {
+        facts = await buildFacts(db, householdId, periodId);
+        for (const attempt of attempts) {
+          try {
+            const answer = await attempt.run(facts);
+            return { answer, citations: [{ source: "calculation_engine", period_id: periodId, facts }], matched_intent: rule.matched_intent, provider: attempt.name, grounded: true };
+          } catch { /* next */ }
+        }
+      } catch { /* fall through to rules */ }
     }
   }
 
-  // Every LLM attempt failed → deterministic rules answer.
   return { ...rule, provider: "rules", degraded: true };
 }

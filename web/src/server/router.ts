@@ -17,6 +17,7 @@ import {
   properties,
   propertyCashFlows,
   scenarios,
+  telegramLinks,
   transactions,
   users,
 } from "../db/schema";
@@ -61,10 +62,12 @@ import {
   softDeletePayment,
 } from "./payments";
 import { cashFlowForecast } from "./cashflow";
-import { copilotAnswer } from "./copilot";
+import { copilotAnswer, loadHistory, pruneHistory, saveTurn } from "./copilot";
+import { runInsightAnalyst } from "./analyst";
 import {
   createTelegramLinkCode,
   handleTelegramUpdate,
+  sendTelegram,
   telegramConfigured,
   telegramLinkStatus,
   unlinkTelegramForHousehold,
@@ -802,7 +805,56 @@ route("POST", "/copilot/ask", async (req) => {
   const ctx = await requireAuth(req);
   const p = await body(req);
   const period = await resolvePeriod(ctx, p.period_id != null ? String(p.period_id) : null);
-  return json(await copilotAnswer(getEnv(), ctx.db, ctx.householdId, p.question ?? "", period ? period.id : null));
+  const question = p.question ?? "";
+  // Per-user conversation memory so the copilot holds a real conversation.
+  const sessionKey = `web:${ctx.userId}`;
+  const history = await loadHistory(ctx.db, sessionKey);
+  const result: any = await copilotAnswer(getEnv(), ctx.db, ctx.householdId, question, period ? period.id : null, history);
+  if (question && result?.answer) {
+    await saveTurn(ctx.db, ctx.householdId, sessionKey, "user", question);
+    await saveTurn(ctx.db, ctx.householdId, sessionKey, "assistant", result.answer);
+    await pruneHistory(ctx.db, sessionKey);
+  }
+  return json(result);
+});
+// Clear this user's copilot conversation memory.
+route("POST", "/copilot/reset", async (req) => {
+  const ctx = await requireAuth(req);
+  await pruneHistory(ctx.db, `web:${ctx.userId}`, 0);
+  return json({ ok: true });
+});
+// Run the proactive analyst for the active household on demand (managing roles).
+route("POST", "/insights/analyze", async (req) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  return json(await runInsightAnalyst(getEnv(), ctx.db, ctx.householdId));
+});
+// Scheduled proactive analysis across all households (cron-authenticated). For
+// each household it records fresh insights and, if a Telegram chat is linked,
+// pushes a short digest.
+route("POST", "/insights/analyze-all", async (req) => {
+  const env = getEnv();
+  const secret = (env as any).CRON_SECRET as string | undefined;
+  if (!secret) throw new HttpError(503, "Scheduled analysis is not configured.");
+  if ((req.headers.get("authorization") || "") !== `Bearer ${secret}`) throw new HttpError(401, "Unauthorized");
+  const db = getDb(env);
+  const hhs = await db.select().from(households);
+  const results: { household_id: number; recorded: number }[] = [];
+  for (const hh of hhs) {
+    try {
+      const r = await runInsightAnalyst(env, db, hh.id);
+      results.push({ household_id: hh.id, recorded: r.recorded });
+      if (r.recorded > 0) {
+        const link = (await db.select().from(telegramLinks).where(eq(telegramLinks.household_id, hh.id))).at(0);
+        if (link) {
+          const top = r.summaries.slice(0, 3).map((s) => `• ${s}`).join("\n");
+          await sendTelegram(env, link.chat_id, `🔎 I reviewed your finances and found ${r.recorded} thing${r.recorded === 1 ? "" : "s"} worth a look:\n${top}\n\nAsk me about any of them, or open HFOS → Insights.`);
+        }
+      }
+    } catch {
+      results.push({ household_id: hh.id, recorded: 0 });
+    }
+  }
+  return json({ households: results.length, results });
 });
 
 // ── Telegram bot ──────────────────────────────────────────────────────────────
