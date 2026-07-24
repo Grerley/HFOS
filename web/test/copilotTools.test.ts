@@ -24,6 +24,15 @@ describe("copilot tool schemas", () => {
     }
   });
 
+  it("exposes owner-level tools so the agent can answer 'whose line is this'", () => {
+    const names = COPILOT_TOOLS.map((t) => t.name);
+    for (const required of ["budget_lines", "owner_breakdown", "household_members"]) {
+      expect(names).toContain(required);
+    }
+    const bl = COPILOT_TOOLS.find((t) => t.name === "budget_lines")!;
+    expect(bl.input_schema.properties).toHaveProperty("owner_name");
+  });
+
   it("record_insight requires the fields the analyst persists", () => {
     expect(RECORD_INSIGHT_TOOL.name).toBe("record_insight");
     expect(RECORD_INSIGHT_TOOL.input_schema.required).toEqual(
