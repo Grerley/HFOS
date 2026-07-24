@@ -6,9 +6,9 @@
  * the model quotes figures verbatim and never does arithmetic — the grounding
  * contract that keeps answers factual. Tools NEVER mutate data.
  */
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type { DB, Env } from "../db/client";
-import { accounts, budgetPeriods, goals as goalsTable, households, properties, propertyCashFlows } from "../db/schema";
+import { accounts, budgetLines, budgetPeriods, categories, goals as goalsTable, households, householdMembers, properties, propertyCashFlows } from "../db/schema";
 import * as calc from "../lib/calc";
 import { loadLinesForCalc } from "./services";
 import { periodSettlement } from "./payments";
@@ -50,6 +50,14 @@ async function allPeriods(db: DB, householdId: number) {
   return db.select().from(budgetPeriods).where(eq(budgetPeriods.household_id, householdId)).orderBy(budgetPeriods.start_date);
 }
 
+/** id → member name for a household, so tools can label owners/payers by name. */
+async function memberNameMap(db: DB, householdId: number): Promise<Map<number, string>> {
+  const rows = await db.select().from(householdMembers).where(eq(householdMembers.household_id, householdId));
+  return new Map(rows.map((m) => [m.id, m.name]));
+}
+const nameOf = (map: Map<number, string>, id?: number | null): string | null =>
+  id != null ? map.get(id) ?? null : null;
+
 async function resolvePeriod(db: DB, householdId: number, periodId?: number | null) {
   if (periodId != null) {
     const p = (await db.select().from(budgetPeriods).where(eq(budgetPeriods.id, Number(periodId)))).at(0);
@@ -65,7 +73,9 @@ export const COPILOT_TOOLS = [
   { name: "period_financials", description: "Full financials for one budget period: planned & actual income, expenses, savings, net position, savings rate, income/expense/net variance, and the top expense categories with their share. Omit period_id for the latest period.", input_schema: { type: "object", properties: { period_id: { type: "integer", description: "Budget period id; omit for latest" } }, additionalProperties: false } },
   { name: "compare_periods", description: "Compare two budget periods and return the deltas (income, expenses, net, savings, savings-rate change) with direction.", input_schema: { type: "object", properties: { period_id_a: { type: "integer" }, period_id_b: { type: "integer" } }, required: ["period_id_a", "period_id_b"], additionalProperties: false } },
   { name: "financial_trends", description: "Time series across the most recent months: income, expenses, net, savings and savings-rate per period. Use this to spot trends, drift and turning points.", input_schema: { type: "object", properties: { months: { type: "integer", description: "How many recent periods (default 12)" } }, additionalProperties: false } },
-  { name: "budget_lines", description: "Line-level detail for a period: each line's category, type, planned, actual and variance. Optionally filter by category_type (income|expense|saving|investment|transfer). Omit period_id for the latest.", input_schema: { type: "object", properties: { period_id: { type: "integer" }, category_type: { type: "string" }, limit: { type: "integer" } }, additionalProperties: false } },
+  { name: "budget_lines", description: "Line-level detail for a period: each line's item name, category, type, the OWNER (which household member the line belongs to) and payer, plus planned, actual and variance. Use this to answer 'whose line is this' or 'how much is X's fuel'. Optionally filter by category_type (income|expense|saving|investment|transfer) or owner_name (case-insensitive match on the member's name). Omit period_id for the latest.", input_schema: { type: "object", properties: { period_id: { type: "integer" }, category_type: { type: "string" }, owner_name: { type: "string", description: "filter to lines owned by this member (partial, case-insensitive)" }, limit: { type: "integer" } }, additionalProperties: false } },
+  { name: "owner_breakdown", description: "Per-member (owner) split of a period: each household member's income, expenses and net position, using each line's owner/allocation. Answers 'who earns/spends what' and 'whose money covers what'. Omit period_id for the latest.", input_schema: { type: "object", properties: { period_id: { type: "integer" }, basis: { type: "string", enum: ["planned", "actual"], description: "default planned" } }, additionalProperties: false } },
+  { name: "household_members", description: "List the household members with their name, relationship and role. Use this to map a name the user mentions (e.g. a partner or child) to the owner labels used elsewhere.", input_schema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "payments_status", description: "Settlement status for a period: total outstanding, overdue amount and count, debit orders to confirm, manual payments remaining, and completion %. Omit period_id for the latest.", input_schema: { type: "object", properties: { period_id: { type: "integer" } }, additionalProperties: false } },
   { name: "net_worth", description: "Household net worth: total assets, total liabilities (loans & credit cards), property equity, and the net figure. Also lists accounts by balance.", input_schema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "goals", description: "All savings goals with progress, amount remaining, monthly required vs planned contribution, monthly shortfall, projected finish date and pace (on_track/behind/overdue/etc).", input_schema: { type: "object", properties: {}, additionalProperties: false } },
@@ -169,18 +179,65 @@ export async function executeCopilotTool(ctx: ToolContext, name: string, input: 
       if (!p) return { error: "No such period. Call list_periods." };
       const limit = Math.max(1, Math.min(Number(input?.limit) || 30, 100));
       const typeFilter = input?.category_type ? String(input.category_type) : null;
-      const lines = await loadLinesForCalc(db, householdId, p.id);
-      const rows = lines
-        .filter((l) => !typeFilter || l.category_type === typeFilter)
+      const ownerFilter = input?.owner_name ? String(input.owner_name).trim().toLowerCase() : null;
+
+      const lineRows = await db.select().from(budgetLines)
+        .where(and(eq(budgetLines.period_id, p.id), eq(budgetLines.household_id, householdId)));
+      const catIds = [...new Set(lineRows.map((l) => l.category_id))];
+      const cats = catIds.length ? await db.select().from(categories).where(inArray(categories.id, catIds)) : [];
+      const catById = new Map(cats.map((c) => [c.id, c]));
+      const members = await memberNameMap(db, householdId);
+
+      const rows = lineRows
         .map((l) => {
-          const planned = l.planned_cents ?? 0;
-          const actual = l.actual_cents ?? 0;
-          return { category: l.category_name ?? "Uncategorised", type: l.category_type, planned: fmtMoney(planned, cur), actual: fmtMoney(actual, cur), variance: fmtMoney(actual - planned, cur), _sort: planned };
+          const cat = catById.get(l.category_id);
+          const planned = l.planned_amount_cents ?? 0;
+          const actual = l.actual_amount_cents ?? 0;
+          const owner = nameOf(members, l.owner_member_id);
+          return {
+            item: l.item_name,
+            category: cat?.name ?? "Uncategorised",
+            type: cat?.type ?? "expense",
+            owner: owner ?? "unassigned",
+            payer: nameOf(members, l.payer_member_id),
+            planned: fmtMoney(planned, cur),
+            actual: fmtMoney(actual, cur),
+            variance: fmtMoney(actual - planned, cur),
+            _sort: planned,
+            _type: cat?.type ?? "expense",
+            _owner: (owner ?? "").toLowerCase(),
+          };
         })
+        .filter((r) => !typeFilter || r._type === typeFilter)
+        .filter((r) => !ownerFilter || r._owner.includes(ownerFilter))
         .sort((x, y) => y._sort - x._sort)
         .slice(0, limit)
-        .map(({ _sort, ...r }) => r);
+        .map(({ _sort, _type, _owner, ...r }) => r);
       return { period: { period_id: p.id, label: p.label }, count: rows.length, lines: rows };
+    }
+
+    case "owner_breakdown": {
+      const p = await resolvePeriod(db, householdId, input?.period_id);
+      if (!p) return { error: "No such period. Call list_periods." };
+      const basis = input?.basis === "actual" ? "actual" : "planned";
+      const lines = await loadLinesForCalc(db, householdId, p.id);
+      const positions = calc.ownerPositions(lines, basis as any);
+      const members = await memberNameMap(db, householdId);
+      const owners = Object.entries(positions).map(([id, pos]) => ({
+        owner: nameOf(members, Number(id)) ?? `member #${id}`,
+        income: fmtMoney(pos.income_cents, cur),
+        expenses: fmtMoney(pos.expense_cents, cur),
+        net: fmtMoney(pos.net_cents, cur),
+        _net: pos.net_cents,
+      })).sort((a, b) => b._net - a._net).map(({ _net, ...o }) => o);
+      return { period: { period_id: p.id, label: p.label }, basis, owners };
+    }
+
+    case "household_members": {
+      const rows = await db.select().from(householdMembers).where(eq(householdMembers.household_id, householdId));
+      return {
+        members: rows.map((m) => ({ name: m.name, relationship: m.relationship_label ?? null, role: m.role, active: m.is_active })),
+      };
     }
 
     case "payments_status": {
