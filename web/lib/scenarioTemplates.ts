@@ -166,7 +166,6 @@ function deserializeEvent(e: Record<string, any>): EventDraft {
 // ── Template gallery ──────────────────────────────────────────────────────────
 export interface ScenarioTemplate {
   id: string;
-  icon: string;
   title: string;
   blurb: string;
   build: () => ScenarioDraft;
@@ -175,7 +174,6 @@ export interface ScenarioTemplate {
 export const TEMPLATES: ScenarioTemplate[] = [
   {
     id: "job_loss",
-    icon: "🛟",
     title: "Job loss / income shock",
     blurb: "Lose one salary for a while, then recover — see how long your cash lasts.",
     build: () => ({
@@ -191,7 +189,6 @@ export const TEMPLATES: ScenarioTemplate[] = [
   },
   {
     id: "buy_home",
-    icon: "🏡",
     title: "Buy a home",
     blurb: "Deposit + bond repayment + rates — model the net-worth impact over 10 years.",
     build: () => ({
@@ -207,7 +204,6 @@ export const TEMPLATES: ScenarioTemplate[] = [
   },
   {
     id: "new_dependent",
-    icon: "👶",
     title: "New baby / dependent",
     blurb: "A step-up in monthly costs plus a one-off setup cost.",
     build: () => ({
@@ -223,7 +219,6 @@ export const TEMPLATES: ScenarioTemplate[] = [
   },
   {
     id: "fire",
-    icon: "🔥",
     title: "Aggressive saving (FIRE)",
     blurb: "Cut spending and raise contributions — track the path to a bigger net worth.",
     build: () => ({
