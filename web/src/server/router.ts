@@ -1,5 +1,5 @@
 /** Minimal method+path router → handlers. Mounted under /api by the catch-all route. */
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, notLike } from "drizzle-orm";
 import { getDb, getEnv, secret } from "../db/client";
 import {
   accountBalances,
@@ -817,12 +817,24 @@ route("GET", "/reports/cash-flow", async (req) => {
 });
 route("GET", "/insights", async (req) => {
   const ctx = await requireAuth(req);
-  return json(await ctx.db.select().from(insights).where(and(eq(insights.household_id, ctx.householdId))).orderBy(desc(insights.created_at)));
+  // Only open insights surface (acknowledged/dismissed ones drop off the tile).
+  return json(await ctx.db.select().from(insights)
+    .where(and(eq(insights.household_id, ctx.householdId), eq(insights.status, "open")))
+    .orderBy(desc(insights.created_at)));
 });
 route("POST", "/insights/generate/:periodId", async (req, params) => {
   const ctx = await requireAuth(req); requireWrite(ctx);
   const period = await getScoped(ctx.db.select().from(budgetPeriods).where(eq(budgetPeriods.id, Number(params.periodId))), ctx.householdId, "Budget period");
   const found = await generatePeriodInsights(ctx.db, ctx.householdId, period.id);
+  // Idempotent refresh: clear this period's prior OPEN rule-based insights first
+  // (leave the proactive ai:* set and any acknowledged/dismissed history alone),
+  // so regenerating never piles up duplicates.
+  await ctx.db.delete(insights).where(and(
+    eq(insights.household_id, ctx.householdId),
+    eq(insights.period_id, period.id),
+    eq(insights.status, "open"),
+    notLike(insights.type, "ai:%"),
+  ));
   const created = [];
   for (const item of found) {
     const [ins] = await ctx.db.insert(insights).values({
