@@ -3,7 +3,7 @@ import "./globals.css";
 import { themeInitScript } from "@/components/theme";
 
 export const metadata: Metadata = {
-  title: "HFOS — Household Financial Operating System",
+  title: "HFOS: Household Financial Operating System",
   description: "A secure, explainable personal-CFO platform for serious households.",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "HFOS", statusBarStyle: "default" },

@@ -44,7 +44,7 @@ export default function ImportPage() {
     <AppShell>
       <PageHeader
         title="Import workbook"
-        description="Bring your existing Excel budget in. Import is idempotent — re-running never duplicates periods."
+        description="Bring your existing Excel budget in. Import is idempotent, so re-running never duplicates periods."
       />
 
       <Card className="mb-6" title="1 · Choose file">
@@ -59,7 +59,7 @@ export default function ImportPage() {
           <Button onClick={runImport} disabled={!file || busy}>{busy ? "Working…" : "Import"}</Button>
         </div>
         <p className="mt-2 text-xs text-ink-muted">
-          Analyze previews sheets and detected owners without writing anything. Import is idempotent — re-running never duplicates periods.
+          Analyze previews sheets and detected owners without writing anything. Import is idempotent, so re-running never duplicates periods.
         </p>
       </Card>
 
@@ -77,7 +77,7 @@ export default function ImportPage() {
                   <td className="py-1.5">{s.sheet}</td>
                   <td className="py-1.5"><Badge tone={s.kind === "monthly" ? "positive" : "neutral"}>{s.kind}</Badge></td>
                   <td className="py-1.5 text-xs text-ink-muted">{(s.owners || []).join(", ")}</td>
-                  <td className="py-1.5 text-right tabular">{s.line_count ?? "—"}</td>
+                  <td className="py-1.5 text-right tabular">{s.line_count ?? "–"}</td>
                 </tr>
               ))}
             </tbody>
@@ -124,7 +124,7 @@ export default function ImportPage() {
               <p className="mb-2 text-sm font-medium text-ink">Review queue</p>
               {report.review_queue.map((q: any, i: number) => (
                 <div key={i} className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
-                  {q.sheet}: {q.reason} — {q.action}
+                  {q.sheet}: {q.reason} ({q.action})
                 </div>
               ))}
             </div>

@@ -1,5 +1,5 @@
 {
-  "name": "HFOS — Household Financial Operating System",
+  "name": "HFOS: Household Financial Operating System",
   "short_name": "HFOS",
   "description": "A secure, explainable personal-CFO platform for serious households.",
   "start_url": "/dashboard",

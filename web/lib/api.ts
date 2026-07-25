@@ -49,7 +49,7 @@ export class ApiError extends Error {
 // this as a soft success ("saved offline") rather than a hard failure.
 export class OfflineError extends Error {
   queued = true;
-  constructor(message = "Saved offline — this change will sync when you reconnect.") {
+  constructor(message = "Saved offline. This change will sync when you reconnect.") {
     super(message);
   }
 }
@@ -91,18 +91,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
-// POSTs that are query-like (not mutations) — never queue these for replay.
+// POSTs that are query-like (not mutations): never queue these for replay.
 const NON_QUEUEABLE = ["/copilot/ask", "/import/workbook/analyze"];
 
 async function mutate<T>(method: string, path: string, body?: unknown): Promise<T> {
   try {
     return await request<T>(path, { method, body: body != null ? JSON.stringify(body) : undefined });
   } catch (err) {
-    // Only queue genuine offline/network failures — real server errors propagate.
+    // Only queue genuine offline/network failures; real server errors propagate.
     if (err instanceof ApiError) throw err;
     if (isNetworkError(err)) {
       if (NON_QUEUEABLE.some((p) => path.startsWith(p))) {
-        throw new OfflineError("You're offline — reconnect to use this.");
+        throw new OfflineError("You're offline. Reconnect to use this.");
       }
       return queueOrThrow<T>(method, path, body ?? null);
     }
@@ -116,7 +116,7 @@ export const api = {
   patch: <T>(path: string, body?: unknown) => mutate<T>("PATCH", path, body),
   del: <T>(path: string) => mutate<T>("DELETE", path),
 
-  // Multipart upload (workbook import) — no JSON content-type.
+  // Multipart upload (workbook import): no JSON content-type.
   async upload<T>(path: string, form: FormData): Promise<T> {
     const headers: Record<string, string> = {};
     const token = getToken();

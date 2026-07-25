@@ -86,7 +86,7 @@ export default function GoalsPage() {
 
   const money = (c: number) => formatMoney(c, currency);
 
-  // Portfolio roll-up — sums/counts of engine-computed figures, no re-derived formulas.
+  // Portfolio roll-up: sums/counts of engine-computed figures, no re-derived formulas.
   const totals = goals.reduce(
     (a, g) => ({
       saved: a.saved + g.current_amount_cents,

@@ -54,8 +54,8 @@ export default function OfflineBanner() {
   if (offline) {
     tone = "border-warning/40 bg-warning/10 text-warning";
     message = pending > 0
-      ? `You're offline — ${pending} change${pending === 1 ? "" : "s"} will sync when you reconnect.`
-      : "You're offline — showing your last synced data. Changes will queue until you're back online.";
+      ? `You're offline. ${pending} change${pending === 1 ? "" : "s"} will sync when you reconnect.`
+      : "You're offline, showing your last synced data. Changes will queue until you're back online.";
   } else if (failed > 0) {
     tone = "border-negative/40 bg-negative/10 text-negative";
     message = `${failed} change${failed === 1 ? "" : "s"} couldn't sync (a conflict or validation error).`;

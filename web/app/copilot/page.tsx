@@ -67,14 +67,14 @@ export default function CopilotPage() {
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Badge tone="info">{PROVIDER_LABEL[t.provider] ?? t.provider}</Badge>
               {t.citations.length > 0 && <Badge tone="positive">grounded in calc engine</Badge>}
-              {t.degraded && <Badge tone="warning">AI unavailable — rule engine</Badge>}
+              {t.degraded && <Badge tone="warning">AI unavailable: rule engine</Badge>}
             </div>
           </Card>
         ))}
         {!turns.length && (
           <p className="text-sm text-ink-muted">
-            Ask in plain language. The copilot investigates your real data — periods, trends,
-            comparisons, goals, property, payments and net worth — using read-only tools, then answers
+            Ask in plain language. The copilot investigates your real data (periods, trends,
+            comparisons, goals, property, payments and net worth) using read-only tools, then answers
             and points out trends, risks and opportunities. Every figure it quotes is computed by the
             deterministic engine (it never does the maths itself), and it remembers the conversation. If
             the model is unavailable it falls back to the explainable rule engine automatically.

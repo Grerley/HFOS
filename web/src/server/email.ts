@@ -1,10 +1,10 @@
 /**
- * Transactional email via Resend (https://resend.com) — a single REST call from
+ * Transactional email via Resend (https://resend.com): a single REST call from
  * the Worker, no SDK. Provider-swappable: only this file knows about Resend.
  *
  * Config (all optional; email simply stays disabled until set):
- *   RESEND_API_KEY  — encrypted secret (synced from GitHub Actions).
- *   EMAIL_FROM      — e.g. "HFOS <noreply@yourdomain.com>" (a [vars] value).
+ *   RESEND_API_KEY  is an encrypted secret (synced from GitHub Actions).
+ *   EMAIL_FROM      is e.g. "HFOS <noreply@yourdomain.com>" (a [vars] value).
  * A missing key returns {sent:false, reason:"email_not_configured"} so callers
  * (e.g. password reset) degrade gracefully instead of erroring.
  */

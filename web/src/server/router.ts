@@ -270,7 +270,7 @@ route("POST", "/auth/reset-password", async (req) => {
   const result = await consumeResetToken(db, p.token, p.password);
   if (!result.ok) {
     const msg =
-      result.reason === "expired" ? "This reset link has expired — request a new one."
+      result.reason === "expired" ? "This reset link has expired. Request a new one."
       : result.reason === "used" ? "This reset link has already been used."
       : "This reset link is invalid.";
     throw new HttpError(400, msg);
@@ -464,7 +464,7 @@ route("DELETE", "/categories/:id", async (req, params) => {
   const ctx = await requireAuth(req); requireWrite(ctx);
   const cat = await getScoped(ctx.db.select().from(categories).where(eq(categories.id, Number(params.id))), ctx.householdId, "Category");
   const usedBy = await ctx.db.select().from(budgetLines).where(and(eq(budgetLines.household_id, ctx.householdId), eq(budgetLines.category_id, cat.id)));
-  if (usedBy.length) throw new HttpError(409, `In use by ${usedBy.length} budget line${usedBy.length === 1 ? "" : "s"} — reassign or remove them first.`);
+  if (usedBy.length) throw new HttpError(409, `In use by ${usedBy.length} budget line${usedBy.length === 1 ? "" : "s"}. Reassign or remove them first.`);
   if (cat.is_section) {
     const children = await ctx.db.select().from(categories).where(and(eq(categories.household_id, ctx.householdId), eq(categories.parent_id, cat.id)));
     if (children.length) throw new HttpError(409, `Move or delete this section's ${children.length} sub-categor${children.length === 1 ? "y" : "ies"} first.`);
@@ -712,7 +712,7 @@ route("GET", "/scenarios/start-state", async (req) => {
   const base = qp(req, "base_period_id");
   return json(await scenarioStartState(ctx.db, ctx.householdId, base ? Number(base) : null));
 });
-// Run a projection without saving — powers the wizard's live preview.
+// Run a projection without saving; this powers the wizard's live preview.
 route("POST", "/scenarios/preview", async (req) => {
   const ctx = await requireAuth(req);
   const p = await body(req);
@@ -776,7 +776,7 @@ route("GET", "/dashboard", async (req) => {
   const owner_cards = Object.entries(summary.owner_positions).map(([mid, v]) => ({ member_id: Number(mid), member_name: members.get(Number(mid)) ?? "Unknown", ...v }));
   // Net worth = liquid/investment account assets − account debts + property equity.
   // "bond" accounts are excluded because property debt is already netted in
-  // property equity (a bond IS a property loan) — otherwise it double-counts.
+  // property equity (a bond IS a property loan); otherwise it double-counts.
   const accRows = await ctx.db.select().from(accounts).where(eq(accounts.household_id, ctx.householdId));
   const account_assets_cents = accRows.filter((a) => !NW_LIABILITY_TYPES.has(a.type) && !NW_IGNORE_TYPES.has(a.type)).reduce((s, a) => s + a.current_balance_cents, 0);
   const account_liabilities_cents = accRows.filter((a) => NW_LIABILITY_TYPES.has(a.type)).reduce((s, a) => s + Math.abs(a.current_balance_cents), 0);
@@ -896,7 +896,7 @@ route("POST", "/insights/analyze-all", async (req) => {
 });
 
 // ── Telegram bot ──────────────────────────────────────────────────────────────
-// Inbound webhook. Public (no JWT) — authenticated by the shared secret header
+// Inbound webhook. Public (no JWT), authenticated by the shared secret header
 // Telegram echoes back; always returns 200 so Telegram doesn't retry-storm.
 route("POST", "/telegram/webhook", async (req) => {
   const env = getEnv();
@@ -1004,7 +1004,7 @@ route("PATCH", "/budget-lines/:id/payment-config", async (req, params) => {
   const allowed: any = {};
   for (const k of ["due_date", "responsible_member_id", "source_account_id", "is_debit_order", "is_manual_payment", "requires_confirmation", "manual_status", "priority"])
     if (k in p) allowed[k] = p[k];
-  // payment_type is the source of truth — derive the settlement booleans from it.
+  // payment_type is the source of truth; derive the settlement booleans from it.
   if ("payment_type" in p) { allowed.payment_type = p.payment_type; Object.assign(allowed, derivePaymentFlags(p.payment_type)); }
   await ctx.db.update(budgetLines).set(allowed).where(eq(budgetLines.id, line.id));
   await recordAudit(ctx.db, { action: "payment.config_changed", entity_type: "budget_line", entity_id: line.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: allowed });

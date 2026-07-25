@@ -99,7 +99,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="px-5 py-5">
           <span className="inline-block rounded-lg bg-[#ffffff] p-1.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-full.png" alt="HFOS — Household Financial OS" className="block h-auto w-40" />
+            <img src="/logo-full.png" alt="HFOS: Household Financial OS" className="block h-auto w-40" />
           </span>
         </div>
         <nav aria-label="Primary" className="flex-1 space-y-1 overflow-y-auto px-3">

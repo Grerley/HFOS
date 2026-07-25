@@ -115,7 +115,7 @@ export async function flushQueue(base = process.env.NEXT_PUBLIC_API_BASE_URL || 
           body: item.body != null ? JSON.stringify(item.body) : undefined,
         });
       } catch {
-        break; // network dropped again — leave the rest queued
+        break; // network dropped again: leave the rest queued
       }
       if (res.ok || res.status === 204) {
         await remove(item.id);

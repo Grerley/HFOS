@@ -3,8 +3,8 @@
  *
  * Every tool is a thin wrapper over the deterministic calc engine / services,
  * scoped to a single household. Money is returned as pre-formatted strings so
- * the model quotes figures verbatim and never does arithmetic — the grounding
- * contract that keeps answers factual. Tools NEVER mutate data.
+ * the model quotes figures verbatim and never does arithmetic. This is the
+ * grounding contract that keeps answers factual. Tools NEVER mutate data.
  */
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { DB, Env } from "../db/client";

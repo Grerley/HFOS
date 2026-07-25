@@ -15,7 +15,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
         <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-negative/10 text-negative" aria-hidden>!</div>
         <h1 className="text-lg font-semibold">Something went wrong</h1>
         <p className="mt-1 text-sm text-ink-muted">
-          This page hit an unexpected error. Your data is safe — try again, or head back to the dashboard.
+          This page hit an unexpected error. Your data is safe. Try again, or head back to the dashboard.
         </p>
         <div className="mt-5 flex justify-center gap-2">
           <button onClick={reset} className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-fg hover:opacity-90">Try again</button>

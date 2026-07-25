@@ -150,7 +150,7 @@ export function TrendChart({
             ))}
             {/* Invisible wide hit-area for easy hovering. */}
             <rect x={x(i) - (w - 2 * pad) / series.length / 2} y={0} width={(w - 2 * pad) / series.length} height={h} fill="transparent" />
-            <title>{`${s.label} — Income ${format(s.income_cents)}, Expenses ${format(s.expenses_cents)}, Net ${format(s.net_cents)}`}</title>
+            <title>{`${s.label}: Income ${format(s.income_cents)}, Expenses ${format(s.expenses_cents)}, Net ${format(s.net_cents)}`}</title>
           </g>
         ))}
         {series.map((s, i) => (

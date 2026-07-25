@@ -162,10 +162,10 @@ export function parseCommand(text: string): { cmd: string | null; arg: string } 
 
 const HELP =
   "HFOS copilot commands:\n" +
-  "/link <code> — connect this chat (get a code in the app: Settings → Connect Telegram)\n" +
-  "/whoami — show what this chat is linked to\n" +
-  "/unlink — disconnect this chat\n" +
-  "/help — this message\n\n" +
+  "/link <code>: connect this chat (get a code in the app: Settings → Connect Telegram)\n" +
+  "/whoami: show what this chat is linked to\n" +
+  "/unlink: disconnect this chat\n" +
+  "/help: this message\n\n" +
   "Once linked, just ask a question, e.g. \"are we over budget this month?\"";
 
 /**
@@ -220,7 +220,7 @@ export async function handleTelegramUpdate(env: Env, db: DB, update: any): Promi
     const sessionKey = `tg:${chatId}`;
     const history = await loadHistory(db, sessionKey);
     const result: any = await copilotAnswer(env, db, link.household_id, text, periodId, history);
-    const answer = result?.answer || "I couldn't work that out just now — please try again.";
+    const answer = result?.answer || "I couldn't work that out just now. Please try again.";
     await saveTurn(db, link.household_id, sessionKey, "user", text);
     await saveTurn(db, link.household_id, sessionKey, "assistant", answer);
     await pruneHistory(db, sessionKey);
@@ -236,6 +236,6 @@ async function respondLink(env: Env, db: DB, code: string, chatId: string, fromI
     await sendTelegram(env, chatId, "✅ Connected. Ask me anything about your budget, e.g. \"how's our savings rate this month?\"");
   } else {
     const why = r.reason === "expired" ? "that code has expired" : r.reason === "used" ? "that code was already used" : "that code isn't valid";
-    await sendTelegram(env, chatId, `Sorry — ${why}. Generate a fresh one in the app under Settings → Connect Telegram.`);
+    await sendTelegram(env, chatId, `Sorry, ${why}. Generate a fresh one in the app under Settings → Connect Telegram.`);
   }
 }

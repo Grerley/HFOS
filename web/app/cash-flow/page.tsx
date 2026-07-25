@@ -102,7 +102,7 @@ export default function CashFlowPage() {
           <div className="text-sm">
             <span className="font-semibold text-negative">Projected cash shortfall</span>
             <span className="text-ink-soft">
-              {" "}— your balance is projected to reach {money(data.lowest.lowest_cents)}
+              {": "}your balance is projected to reach {money(data.lowest.lowest_cents)}
               {data.lowest.date ? ` around ${shortDate(data.lowest.date)}` : ""}. Consider moving a debit-order date or funding from savings.
             </span>
           </div>
@@ -144,7 +144,7 @@ export default function CashFlowPage() {
         <Card title="Forward projection" subtitle="Month-end balance at the current run-rate">
           <BalanceChart points={forwardPoints} format={money} />
           <p className="mt-3 text-xs text-ink-muted">
-            Projects the closing balance forward at {money(data.monthly_net_cents)}/month. A straight-line estimate — real months vary with one-off income and expenses.
+            Projects the closing balance forward at {money(data.monthly_net_cents)}/month. This is a straight-line estimate, so real months vary with one-off income and expenses.
           </p>
         </Card>
       </div>
@@ -210,7 +210,7 @@ export default function CashFlowPage() {
       <div className="mt-4">
         <Badge tone="info">Explainable estimate</Badge>
         <span className="ml-2 text-xs text-ink-muted">
-          Cash flow uses your live account balances plus outstanding obligations from the settlement engine — no figures are invented.
+          Cash flow uses your live account balances plus outstanding obligations from the settlement engine, so no figures are invented.
         </span>
       </div>
     </AppShell>

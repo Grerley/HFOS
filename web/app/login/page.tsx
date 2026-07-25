@@ -34,7 +34,7 @@ export default function LoginPage() {
         <div className="mb-6 text-center">
           <span className="inline-block rounded-lg bg-[#ffffff] p-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-full.png" alt="HFOS — Household Financial Operating System" className="block h-auto w-52" />
+            <img src="/logo-full.png" alt="HFOS: Household Financial Operating System" className="block h-auto w-52" />
           </span>
         </div>
         <form onSubmit={submit} className="space-y-4 rounded-xl border border-line bg-card p-6 shadow-sm">

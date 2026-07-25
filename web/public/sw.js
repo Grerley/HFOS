@@ -1,4 +1,4 @@
-/* HFOS service worker — offline shell + read caching.
+/* HFOS service worker: offline shell + read caching.
  *
  * Strategy:
  *   · Static assets (/_next/static, icons, manifest): cache-first (immutable).
@@ -7,7 +7,7 @@
  *   · GET /api/*: network-first; on success cache the response, on failure
  *     serve the last cached copy so views render with last-synced data.
  *     Cache is keyed per household so switching households never crosses data.
- *   · Non-GET /api/*: never handled here — the app-level write queue owns
+ *   · Non-GET /api/*: never handled here; the app-level write queue owns
  *     offline mutations (see lib/offline.ts).
  */
 const VERSION = "hfos-v1";
