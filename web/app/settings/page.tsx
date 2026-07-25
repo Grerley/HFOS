@@ -1,10 +1,12 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import AppShell, { PageHeader } from "@/components/AppShell";
 import { Button, Card, Field, Input, Select, Badge, PageSkeleton, ErrorState } from "@/components/ui";
 import { api, getHouseholdId } from "@/lib/api";
 import { useCurrency } from "@/lib/currency";
 import { formatMoney, toCents } from "@/lib/format";
+import { SETTINGS_TABS } from "@/lib/settingsTabs";
 import type { Category, Household, Member } from "@/lib/types";
 
 interface Account { id: number; name: string; type: string; current_balance_cents: number; }
@@ -13,7 +15,12 @@ const CURRENCIES = ["ZAR", "USD", "EUR", "GBP", "AUD", "CAD", "NGN", "KES", "GHS
 const ROLES = ["owner", "partner", "admin", "advisor", "viewer", "child"];
 const CATEGORY_TYPES = ["income", "expense", "saving", "investment", "transfer"];
 
-export default function SettingsPage() {
+function SettingsInner() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const validTab = (id: string | null) => (SETTINGS_TABS.some((t) => t.id === id) ? id! : "household");
+  const tab = validTab(params.get("tab"));
+  const setTab = (id: string) => router.replace(`/settings?tab=${id}`, { scroll: false });
   const [members, setMembers] = useState<Member[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -205,9 +212,21 @@ export default function SettingsPage() {
 
   return (
     <AppShell>
-      <PageHeader title="Settings" description="Manage your household, members and accounts." />
+      <PageHeader title="Settings" description="Manage your household, people, accounts and notifications." />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="mb-6 flex flex-wrap gap-1 overflow-x-auto border-b border-line">
+        {SETTINGS_TABS.map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)} aria-current={tab === t.id ? "page" : undefined}
+            className={`-mb-px whitespace-nowrap rounded-t-lg border-b-2 px-3.5 py-2 text-sm font-medium transition ${
+              tab === t.id ? "border-brand text-brand-dark" : "border-transparent text-ink-soft hover:text-ink"
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "household" && (
+      <div className="grid grid-cols-1 gap-6">
         <Card title="Household" subtitle={isAdmin ? "Name, currency and cycle" : "Admins can edit these"}>
           <form onSubmit={saveHousehold} className="space-y-3">
             <Field label="Household name">
@@ -237,7 +256,11 @@ export default function SettingsPage() {
             )}
           </form>
         </Card>
+      </div>
+      )}
 
+      {tab === "people" && (
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card title="Household members">
           <div className="mb-4 space-y-2">
             {members.map((m) => {
@@ -311,7 +334,11 @@ export default function SettingsPage() {
             <p className="mt-2 text-xs text-ink-muted">Sends a secure link; the invitee sets their own password. If email isn't configured, you'll get a link to share.</p>
           )}
         </Card>
+      </div>
+      )}
 
+      {tab === "notifications" && (
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card title="Payment reminders" subtitle="Daily digest of overdue & soon-due payments">
           <p className="mb-3 text-sm text-ink-soft">
             Managing members get a daily digest when payments are overdue or due within 3 days, over their chosen channels
@@ -391,7 +418,11 @@ export default function SettingsPage() {
             </div>
           )}
         </Card>
+      </div>
+      )}
 
+      {tab === "accounts" && (
+      <div className="grid grid-cols-1 gap-6">
         <Card title="Accounts">
           <div className="mb-4 space-y-2">
             {accounts.map((a) => (
@@ -414,8 +445,12 @@ export default function SettingsPage() {
             <div className="col-span-3"><Button type="submit" variant="ghost">Add account</Button></div>
           </form>
         </Card>
+      </div>
+      )}
 
-        <Card title="Category taxonomy" subtitle={canWrite ? "Rename, add or remove sections and sub-categories" : "Sections and sub-categories"} className="lg:col-span-2">
+      {tab === "categories" && (
+      <div className="grid grid-cols-1 gap-6">
+        <Card title="Category taxonomy" subtitle={canWrite ? "Rename, add or remove sections and sub-categories" : "Sections and sub-categories"}>
           <div className="space-y-3">
             {sections.map((s) => (
               <div key={s.id} className="rounded-lg border border-line-soft px-4 py-3">
@@ -467,6 +502,15 @@ export default function SettingsPage() {
           </div>
         </Card>
       </div>
+      )}
     </AppShell>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<AppShell><PageSkeleton /></AppShell>}>
+      <SettingsInner />
+    </Suspense>
   );
 }
