@@ -33,8 +33,14 @@ a finished commercial product. This document is honest about what is and isn't d
 - **Notifications**: insight generation exists; no scheduled reminders or email/push/WhatsApp delivery.
 - **Multi-household**: schema supports it (every table carries `household_id`); the UI drives a
   single active household via `X-Household-Id`. No in-app household switcher yet.
-- **Scenario engine** covers income/expense %, new expense, savings increase and a property
-  acquisition bond calc. No Monte-Carlo, no natural-language scenario creation.
+- **Scenario engine** is a deterministic **multi-year projection**: month-by-month over a chosen
+  horizon with compounding investment/cash returns, inflation and income drift, and time-phased
+  **events** (income shocks/job loss, one-off windfalls/costs, new recurring income/expenses,
+  lump-sum investing, extra debt payments, property purchase/sale). It reports the full net-worth
+  trajectory vs a do-nothing baseline plus a summary (horizon net worth & delta, cash runway,
+  lowest cash point, break-even month, ending savings rate), with a template gallery and a
+  comparison chart. The legacy single-month engine is still accepted. Not yet: Monte-Carlo /
+  stress bands, and natural-language scenario creation.
 - **Import** maps monthly sheets → periods/lines and classifies specialised sheets, but does not
   yet materialise scenario/receivables/bonus sheets into their modules (they're classified and
   reported, not imported).
@@ -47,8 +53,8 @@ a finished commercial product. This document is honest about what is and isn't d
 2. CSV bank import with per-institution mapping templates + reconciliation view (HFOS-012, 112).
 3. Auto-categorisation rules with confidence scores; split & duplicate-transaction handling.
 4. Receivables, bonus/windfall allocation plans, asset-sale funding (HFOS-033, 081–083).
-5. Property acquisition & sale scenarios surfaced in the UI (HFOS-073, 075).
-6. Scenario compare charts + debt-service ratio + net-worth impact (HFOS-092).
+5. Property acquisition & sale scenarios surfaced in the UI (HFOS-073, 075). — **done** (scenario events).
+6. Scenario compare charts + net-worth impact (HFOS-092). — **done** (trajectory chart + summary). Debt-service ratio still open.
 7. Reports: monthly PDF/XLSX review pack + exports (HFOS-104, 105).
 8. Notifications: due-date reminders + overspend/low-net-position alerts with channels (HFOS-130–133).
 9. Email invitations, password reset, MFA, session/device management.
@@ -60,7 +66,7 @@ a finished commercial product. This document is honest about what is and isn't d
 - LLM copilot is **agentic**: Claude (via AI Gateway, Sonnet by default) drives a set of read-only,
   engine-backed tools (periods, financials, trends, comparisons, budget lines, payments, net worth,
   goals, properties, rule insights) to investigate the real data over multiple steps and answer
-  grounded in calc-engine figures — with per-user/per-chat **conversation memory**. Reachable from the
+  grounded in calc-engine figures (including **owner-level** budget lines and **saved scenarios**) — with per-user/per-chat **conversation memory**. Reachable from the
   web app and over Telegram (per-chat tenant scope). A scheduled **proactive analyst**
   (`/insights/analyze-all`, weekly) records the most important trends/risks/opportunities as Insights
   and pushes a Telegram digest. The agentic path needs a capable model (Claude); it degrades to

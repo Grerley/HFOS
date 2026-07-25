@@ -8,7 +8,7 @@
  */
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { DB, Env } from "../db/client";
-import { accounts, budgetLines, budgetPeriods, categories, goals as goalsTable, households, householdMembers, properties, propertyCashFlows } from "../db/schema";
+import { accounts, budgetLines, budgetPeriods, categories, goals as goalsTable, households, householdMembers, properties, propertyCashFlows, scenarios as scenariosTable } from "../db/schema";
 import * as calc from "../lib/calc";
 import { loadLinesForCalc } from "./services";
 import { periodSettlement } from "./payments";
@@ -81,6 +81,7 @@ export const COPILOT_TOOLS = [
   { name: "goals", description: "All savings goals with progress, amount remaining, monthly required vs planned contribution, monthly shortfall, projected finish date and pace (on_track/behind/overdue/etc).", input_schema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "properties", description: "Property portfolio: per property the market value, outstanding bond, equity, loan-to-value, and monthly cash-flow surplus/shortfall with gross & net yield where cash-flow data exists.", input_schema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "detect_insights", description: "Run the deterministic rule-based checks for a period (over-budget, low savings rate, overdue payments, goal risk, etc.) and return their findings as a starting signal to investigate further. Omit period_id for the latest.", input_schema: { type: "object", properties: { period_id: { type: "integer" } }, additionalProperties: false } },
+  { name: "scenarios", description: "List the household's saved what-if scenarios and their headline projected outcome: horizon net worth, the net-worth difference vs doing nothing, lowest cash point, runway (months of cover), break-even month, and ending savings rate. Use when the user asks about a plan they've modelled ('what does the home-buy scenario do', 'are we on track if I lose my job').", input_schema: { type: "object", properties: {}, additionalProperties: false } },
 ] as const;
 
 /** Analyst-only tool: appended when running the proactive insight agent. */
@@ -317,6 +318,36 @@ export async function executeCopilotTool(ctx: ToolContext, name: string, input: 
       if (!p) return { error: "No such period. Call list_periods." };
       const found = await generatePeriodInsights(db, householdId, p.id);
       return { period: { period_id: p.id, label: p.label }, findings: found.map((f: any) => ({ type: f.type, severity: f.severity, summary: f.summary, explanation: f.explanation })) };
+    }
+
+    case "scenarios": {
+      const rows = await db.select().from(scenariosTable).where(eq(scenariosTable.household_id, householdId)).orderBy(desc(scenariosTable.id));
+      return {
+        scenarios: rows.map((s) => {
+          const r: any = s.projected_results_json || {};
+          if (r.schema_version === 2 && r.summary) {
+            const m = r.summary;
+            return {
+              name: s.name,
+              description: s.description ?? null,
+              horizon_months: r.horizon_months ?? null,
+              projected_net_worth: fmtMoney(m.horizon_net_worth_cents ?? 0, cur),
+              vs_doing_nothing: fmtMoney(m.net_worth_delta_cents ?? 0, cur),
+              lowest_cash_point: fmtMoney(m.min_cash_cents ?? 0, cur),
+              runway_months: m.runway_months ?? null,
+              break_even_month: m.break_even_month ?? null,
+              ending_savings_rate: pct(m.ending_savings_rate ?? 0),
+            };
+          }
+          const proj = r.projected || {};
+          return {
+            name: s.name,
+            description: s.description ?? null,
+            projected_net_position: proj.net_position_cents != null ? fmtMoney(proj.net_position_cents, cur) : null,
+            projected_savings_rate: proj.savings_rate != null ? pct(proj.savings_rate) : null,
+          };
+        }),
+      };
     }
 
     case "record_insight": {

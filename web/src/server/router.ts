@@ -48,7 +48,7 @@ import {
   requireWrite,
 } from "./context";
 import { applyBatch, backfillDueDates, deriveDueDate, duplicatePeriod, loadLinesForCalc, provisionHousehold, recomputeTitheLines, recordAudit, removeMember } from "./services";
-import { generatePeriodInsights, runScenario } from "./insights";
+import { generatePeriodInsights, runScenarioAny, scenarioStartState } from "./insights";
 import { analyzeWorkbook, importWorkbook } from "./import";
 import {
   addPayment,
@@ -706,27 +706,63 @@ route("GET", "/scenarios", async (req) => {
   const ctx = await requireAuth(req);
   return json(await ctx.db.select().from(scenarios).where(eq(scenarios.household_id, ctx.householdId)));
 });
+// Live starting state (flows + balance sheet) for the projection wizard's preview.
+route("GET", "/scenarios/start-state", async (req) => {
+  const ctx = await requireAuth(req);
+  const base = qp(req, "base_period_id");
+  return json(await scenarioStartState(ctx.db, ctx.householdId, base ? Number(base) : null));
+});
+// Run a projection without saving — powers the wizard's live preview.
+route("POST", "/scenarios/preview", async (req) => {
+  const ctx = await requireAuth(req);
+  const p = await body(req);
+  return json(await runScenarioAny(ctx.db, ctx.householdId, p.base_period_id ?? null, p.assumptions_json ?? {}));
+});
 route("POST", "/scenarios", async (req) => {
   const ctx = await requireAuth(req); requireWrite(ctx);
   const p = await body(req);
-  const results = await runScenario(ctx.db, ctx.householdId, p.base_period_id ?? null, p.assumptions_json ?? {});
+  const results = await runScenarioAny(ctx.db, ctx.householdId, p.base_period_id ?? null, p.assumptions_json ?? {});
   const [s] = await ctx.db.insert(scenarios).values({
     household_id: ctx.householdId, name: p.name, base_period_id: p.base_period_id ?? null, description: p.description ?? null,
     assumptions_json: p.assumptions_json ?? {}, projected_results_json: results as any, created_by_id: ctx.userId,
   }).returning();
   return json(s, 201);
 });
+route("PATCH", "/scenarios/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const s = await getScoped(ctx.db.select().from(scenarios).where(eq(scenarios.id, Number(params.id))), ctx.householdId, "Scenario");
+  const p = await body(req);
+  const base_period_id = p.base_period_id !== undefined ? p.base_period_id : s.base_period_id;
+  const assumptions = p.assumptions_json !== undefined ? p.assumptions_json : s.assumptions_json;
+  // Re-run whenever the base or assumptions change; otherwise keep stored results.
+  const rerun = p.assumptions_json !== undefined || p.base_period_id !== undefined;
+  const results = rerun ? await runScenarioAny(ctx.db, ctx.householdId, base_period_id ?? null, (assumptions ?? {}) as any) : s.projected_results_json;
+  await ctx.db.update(scenarios).set({
+    name: p.name ?? s.name,
+    description: p.description !== undefined ? p.description : s.description,
+    base_period_id: base_period_id ?? null,
+    assumptions_json: (assumptions ?? {}) as any,
+    projected_results_json: results as any,
+  }).where(eq(scenarios.id, s.id));
+  return json((await ctx.db.select().from(scenarios).where(eq(scenarios.id, s.id))).at(0));
+});
+route("DELETE", "/scenarios/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const s = await getScoped(ctx.db.select().from(scenarios).where(eq(scenarios.id, Number(params.id))), ctx.householdId, "Scenario");
+  await ctx.db.delete(scenarios).where(eq(scenarios.id, s.id));
+  return json({ ok: true });
+});
 route("POST", "/scenarios/:id/run", async (req, params) => {
   const ctx = await requireAuth(req); requireWrite(ctx);
   const s = await getScoped(ctx.db.select().from(scenarios).where(eq(scenarios.id, Number(params.id))), ctx.householdId, "Scenario");
-  const results = await runScenario(ctx.db, ctx.householdId, s.base_period_id ?? null, (s.assumptions_json ?? {}) as any);
+  const results = await runScenarioAny(ctx.db, ctx.householdId, s.base_period_id ?? null, (s.assumptions_json ?? {}) as any);
   await ctx.db.update(scenarios).set({ projected_results_json: results as any }).where(eq(scenarios.id, s.id));
   return json((await ctx.db.select().from(scenarios).where(eq(scenarios.id, s.id))).at(0));
 });
 route("GET", "/scenarios/:id/compare", async (req, params) => {
   const ctx = await requireAuth(req);
   const s = await getScoped(ctx.db.select().from(scenarios).where(eq(scenarios.id, Number(params.id))), ctx.householdId, "Scenario");
-  return json(s.projected_results_json ?? (await runScenario(ctx.db, ctx.householdId, s.base_period_id ?? null, (s.assumptions_json ?? {}) as any)));
+  return json(s.projected_results_json ?? (await runScenarioAny(ctx.db, ctx.householdId, s.base_period_id ?? null, (s.assumptions_json ?? {}) as any)));
 });
 
 // ── Dashboard / reports / insights / copilot ─────────────────────────────────
