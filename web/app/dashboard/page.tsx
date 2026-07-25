@@ -53,6 +53,12 @@ export default function DashboardPage() {
 
   useEffect(() => { load(); }, []);
 
+  async function dismissInsight(id: number) {
+    setInsights((cur) => cur.filter((i) => i.id !== id)); // optimistic
+    try { await api.patch(`/insights/${id}/status?new_status=dismissed`, {}); }
+    catch { load(); } // restore true state on failure
+  }
+
   if (loading) return <AppShell><PageSkeleton /></AppShell>;
   if (error) return (
     <AppShell>
@@ -213,18 +219,23 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        <Card title="Insights & alerts" subtitle="Explainable, rule-based">
+        <Card title="Insights & alerts" subtitle="Explainable, grounded in your data">
           <div className="space-y-3">
             {insights.slice(0, 5).map((i) => (
               <div key={i.id} className="rounded-lg border border-line-soft p-3">
-                <div className="mb-1 flex items-center justify-between">
+                <div className="mb-1 flex items-center justify-between gap-2">
                   <Badge tone={i.severity}>{i.severity}</Badge>
+                  <button onClick={() => dismissInsight(i.id)} title="Dismiss" aria-label="Dismiss insight"
+                    className="rounded px-1.5 text-ink-muted hover:text-negative">✕</button>
                 </div>
                 <p className="text-sm font-medium text-ink">{i.summary}</p>
                 {i.explanation && <p className="mt-1 text-xs text-ink-muted">{i.explanation}</p>}
+                {i.action && <p className="mt-1 text-xs font-medium text-brand-dark">{i.action}</p>}
               </div>
             ))}
-            {!insights.length && <p className="text-sm text-ink-muted">No alerts. Generate insights from the planner.</p>}
+            {!insights.length && (
+              <p className="text-sm text-ink-muted">No alerts right now. Generate rule-based checks from the Planner, or ask the copilot to review your finances.</p>
+            )}
           </div>
         </Card>
       </div>
