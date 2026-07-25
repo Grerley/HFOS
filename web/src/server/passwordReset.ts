@@ -1,6 +1,6 @@
 /**
  * Password-reset tokens: create a single-use, 1-hour token (store only its hash),
- * and consume it to set a new password. No account enumeration — the caller
+ * and consume it to set a new password. No account enumeration: the caller
  * always responds the same whether or not the email exists.
  */
 import { and, eq, isNull, sql } from "drizzle-orm";

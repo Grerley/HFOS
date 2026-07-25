@@ -1,5 +1,5 @@
 /**
- * Password hashing using Web Crypto PBKDF2 — runs natively on Cloudflare Workers
+ * Password hashing using Web Crypto PBKDF2, which runs natively on Cloudflare Workers
  * (no native bcrypt dependency). Format: pbkdf2$<iterations>$<saltB64>$<hashB64>.
  */
 const ITERATIONS = 100_000;

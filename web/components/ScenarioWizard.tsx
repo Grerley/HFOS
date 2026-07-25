@@ -125,7 +125,7 @@ export default function ScenarioWizard({
       open={open}
       onClose={onClose}
       title={editing ? "Edit scenario" : "New scenario"}
-      subtitle="Project a decision over years — scenarios never change your real budgets"
+      subtitle="Project a decision over years: scenarios never change your real budgets"
       wide
       footer={
         <>
@@ -139,7 +139,7 @@ export default function ScenarioWizard({
       <Steps steps={steps} current={step} />
       {error && <p className="mb-3 rounded-lg bg-negative/10 px-3 py-2 text-sm text-negative">{error}</p>}
 
-      {/* STEP 0 — base month + horizon + starting balance sheet */}
+      {/* STEP 0: base month + horizon + starting balance sheet */}
       {step === 0 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -171,10 +171,10 @@ export default function ScenarioWizard({
         </div>
       )}
 
-      {/* STEP 1 — global assumptions */}
+      {/* STEP 1: global assumptions */}
       {step === 1 && (
         <div className="space-y-4">
-          <p className="text-sm text-ink-soft">These drive the year-on-year drift. Sensible South-African defaults are pre-filled — adjust to taste.</p>
+          <p className="text-sm text-ink-soft">These drive the year-on-year drift. Sensible South-African defaults are pre-filled. Adjust to taste.</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <PctField label="Inflation on living costs" value={draft.annual_inflation} onChange={(v) => patch({ annual_inflation: v })} />
             <PctField label="Income growth / year" value={draft.annual_income_growth} onChange={(v) => patch({ annual_income_growth: v })} />
@@ -185,7 +185,7 @@ export default function ScenarioWizard({
         </div>
       )}
 
-      {/* STEP 2 — event timeline */}
+      {/* STEP 2: event timeline */}
       {step === 2 && (
         <div className="space-y-4">
           <div>
@@ -202,7 +202,7 @@ export default function ScenarioWizard({
 
           {draft.events.length === 0 ? (
             <p className="rounded-lg border border-dashed border-line px-3 py-6 text-center text-sm text-ink-muted">
-              No events yet — add one above, or leave empty to project your current trajectory.
+              No events yet. Add one above, or leave empty to project your current trajectory.
             </p>
           ) : (
             <div className="space-y-3">
@@ -213,7 +213,7 @@ export default function ScenarioWizard({
         </div>
       )}
 
-      {/* STEP 3 — review + chart + save */}
+      {/* STEP 3: review + chart + save */}
       {step === 3 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -284,7 +284,7 @@ function MiniOutcome({ summary, previewing, money, expanded }: { summary: any; p
         <Stat label="Ending savings rate" value={formatPercent(summary.ending_savings_rate ?? 0)} />
         {expanded && <Stat label="Lowest cash point" value={money(summary.min_cash_cents ?? 0)} />}
         {expanded && <Stat label="Total invested" value={money(summary.total_contributions_cents ?? 0)} />}
-        {expanded && <Stat label="Break-even" value={summary.break_even_month ? `month ${summary.break_even_month}` : "—"} />}
+        {expanded && <Stat label="Break-even" value={summary.break_even_month ? `month ${summary.break_even_month}` : "n/a"} />}
       </div>
     </div>
   );

@@ -84,7 +84,7 @@ function digestHtml(d: HouseholdDigest): string {
   const row = (l: DigestLine) =>
     `<tr>
        <td style="padding:6px 8px;border-top:1px solid #e4e8ef;font-size:13px;">${l.item_name}${l.responsible ? ` <span style="color:#6b7891;">· ${l.responsible}</span>` : ""}</td>
-       <td style="padding:6px 8px;border-top:1px solid #e4e8ef;font-size:13px;color:#6b7891;">${l.due_date ?? "—"}</td>
+       <td style="padding:6px 8px;border-top:1px solid #e4e8ef;font-size:13px;color:#6b7891;">${l.due_date ?? "n/a"}</td>
        <td style="padding:6px 8px;border-top:1px solid #e4e8ef;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;">${money(l.outstanding_cents, d.currency)}</td>
      </tr>`;
   const section = (title: string, color: string, lines: DigestLine[]) =>
@@ -123,7 +123,7 @@ interface DeliveryTarget {
 async function deliver(env: Env, digest: HouseholdDigest, targets: DeliveryTarget[]) {
   const html = digestHtml(digest);
   const text = digestText(digest);
-  const subject = `${digest.overdue.length ? "⚠ Overdue & " : ""}Payments due — ${digest.household_name}`;
+  const subject = `${digest.overdue.length ? "⚠ Overdue & " : ""}Payments due for ${digest.household_name}`;
   const emailOn = emailConfigured(env);
   const waOn = whatsappConfigured(env);
   let emails_sent = 0;
@@ -179,7 +179,7 @@ export async function sendReminderForHousehold(env: Env, db: DB, householdId: nu
   return { sent: emails_sent + whatsapp_sent > 0, emails_sent, whatsapp_sent, ...counts };
 }
 
-/** Admin "send me a test" — delivers this household's digest to the calling user's own channels. */
+/** Admin "send me a test": delivers this household's digest to the calling user's own channels. */
 export async function sendReminderToUser(env: Env, db: DB, householdId: number, userId: number, dueSoonDays = DEFAULT_DUE_SOON_DAYS) {
   const digest = await buildHouseholdDigest(db, householdId, dueSoonDays);
   const counts = { overdue_count: digest?.overdue.length ?? 0, due_soon_count: digest?.due_soon.length ?? 0 };

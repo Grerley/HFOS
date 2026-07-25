@@ -1,5 +1,5 @@
 /**
- * HFOS calculation engine — the single, deterministic source of all financial maths.
+ * HFOS calculation engine: the single, deterministic source of all financial maths.
  * Faithful TypeScript port of backend/app/services/calculations.py.
  *
  * Rules: money is integer minor units (cents); ratios are numbers rounded to 6 dp.
@@ -377,7 +377,7 @@ export function scenarioDelta(
 // A deterministic month-by-month projection of a household's finances. It takes a
 // starting state (monthly flows + balances) and assumptions (drift + time-phased
 // events) and returns the full trajectory plus headline outcomes. Pure and
-// unit-tested; the UI mirrors it only for a live preview — the server value wins.
+// unit-tested; the UI mirrors it only for a live preview, but the server value wins.
 
 /** Effective monthly rate from an annual rate (compounding): (1+a)^(1/12) − 1. */
 export function monthlyRate(annual: number): number {

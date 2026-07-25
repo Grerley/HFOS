@@ -72,7 +72,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Visible keyboard focus everywhere (WCAG 2.2 AA — 2.4.7, 2.4.11). Pointer
+/* Visible keyboard focus everywhere (WCAG 2.2 AA: 2.4.7, 2.4.11). Pointer
    users don't see the ring; keyboard users always do. */
 :focus-visible {
   outline: 2px solid var(--brand);

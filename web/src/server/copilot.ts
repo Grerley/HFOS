@@ -4,7 +4,7 @@
  * Design principle (non-negotiable): the deterministic calculation engine is the
  * ONLY source of numbers. We compute a structured, pre-formatted "facts" bundle
  * server-side and hand it to the model with a strict grounding prompt. The model
- * may only phrase and reason over those facts — it never does arithmetic. If the
+ * may only phrase and reason over those facts. It never does arithmetic. If the
  * model is unavailable, errors, or times out, we fall back to the rule-based
  * answer, so the copilot is always at least as good as the deterministic engine.
  */
@@ -21,7 +21,7 @@ const LIABILITY_TYPES = new Set(["loan", "credit_card", "bond"]);
 const LLM_TIMEOUT_MS = 9000;
 
 // Per-provider default models (each overridable via HFOS_COPILOT_MODEL).
-// Native Workers AI model — free-tier, in-region. fp8-fast supersedes the
+// Native Workers AI model: free-tier, in-region. fp8-fast supersedes the
 // deprecated "@cf/meta/llama-3.1-8b-instruct" and is cheaper + faster.
 const DEFAULT_WORKERS_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8-fast";
 // Claude via Cloudflare AI Gateway (Unified Billing, no key). Cloudflare's
@@ -97,7 +97,7 @@ async function buildFacts(db: DB, householdId: number, periodId: number) {
 const SYSTEM_PROMPT = `You are HFOS, a calm, precise household-finance copilot for a South African family.
 You will receive a JSON object called FACTS containing figures already computed by a deterministic engine, and the user's QUESTION.
 
-Rules — follow all of them:
+Rules (follow all of them):
 - Use ONLY the numbers in FACTS. Never invent, estimate, or recompute any figure. Quote money and percentages exactly as written in FACTS (they are pre-formatted strings).
 - If FACTS does not contain what's needed to answer, say so plainly and point to the relevant HFOS section (Planner, Payments, Cash flow, Goals, Property, Scenarios).
 - Be concise: 2–4 sentences, warm and practical. No headings, no markdown, no bullet symbols.
@@ -150,7 +150,7 @@ async function runWorkersAI(env: Env, model: string, facts: unknown, question: s
 
 /**
  * Claude via the same AI binding, routed through Cloudflare AI Gateway.
- * Third-party models bill through Unified Billing — Cloudflare manages the
+ * Third-party models bill through Unified Billing. Cloudflare manages the
  * Anthropic credentials, so there is no API key to hold. Requires an AI
  * Gateway and loaded credits on the account.
  */
@@ -198,7 +198,7 @@ async function runAnthropic(env: Env, model: string, facts: unknown, question: s
 
 // ── Agentic layer ─────────────────────────────────────────────────────────────
 // The model drives: it calls read-only, engine-backed tools to gather exactly
-// the data it needs, reasons over multiple steps, then answers — grounded in the
+// the data it needs, reasons over multiple steps, then answers, grounded in the
 // figures the tools return. Numbers still come only from the deterministic engine.
 
 const AGENT_TIMEOUT_MS = 30_000; // whole loop budget
@@ -211,11 +211,11 @@ You have READ-ONLY tools that return figures already computed by a deterministic
 
 How to work:
 - Investigate before answering. Call tools to get real numbers; for anything analytical, prefer trends and period comparisons over a single snapshot. Call list_periods first if you need a period id.
-- Ground every figure in a tool result. Quote money and percentages EXACTLY as the tools return them (they are pre-formatted strings). Never invent, estimate, or recompute a number — if you need a figure you don't have, call a tool.
+- Ground every figure in a tool result. Quote money and percentages EXACTLY as the tools return them (they are pre-formatted strings). Never invent, estimate, or recompute a number. If you need a figure you don't have, call a tool.
 - Budget lines carry an OWNER (the household member a line belongs to). When the user asks whose line something is, or about a specific person's income/expenses, use budget_lines (owner/payer are included; filter by owner_name), owner_breakdown (per-member income/expenses/net) and household_members (to resolve a name). If a line's owner is "unassigned", say so rather than guessing.
-- Be genuinely useful: answer the question, then surface the "why" and any notable trend, risk or opportunity the user may not have spotted. Stay concise and skimmable — short paragraphs; a few plain bullet points ("- ") are fine.
+- Be genuinely useful: answer the question, then surface the "why" and any notable trend, risk or opportunity the user may not have spotted. Stay concise and skimmable: short paragraphs; a few plain bullet points ("- ") are fine.
 - South African terminology (ZAR, bond, debit order, levies). Never give regulated financial advice; frame suggestions as options to consider.
-- You cannot change any data — you only read and analyse. If data is missing, say so plainly.`;
+- You cannot change any data. You only read and analyse. If data is missing, say so plainly.`;
 
 export type ConvMessage = { role: "user" | "assistant"; content: any };
 export type Transport = { kind: "ai-gateway"; model: string; gatewayId: string } | { kind: "anthropic"; model: string };
@@ -291,7 +291,7 @@ export async function runAgent(env: Env, db: DB, householdId: number, cfg: Agent
     convo.push({ role: "user", content: results });
   }
 
-  // Ran out of iterations — one final, tool-free answer from what we gathered.
+  // Ran out of iterations: one final, tool-free answer from what we gathered.
   const res = await callMessages(env, cfg.transport, cfg.system + "\n\nYou have gathered enough data. Give your final answer now using only figures already returned by the tools.", convo, []);
   const text = res.content.filter((b: any) => b?.type === "text").map((b: any) => b.text).join("").trim();
   return { answer: text, trace };
@@ -299,7 +299,7 @@ export async function runAgent(env: Env, db: DB, householdId: number, cfg: Agent
 
 /**
  * Introspection helper. Runs one raw model call (with tools) plus a full agent
- * loop and reports the shapes/errors — so we can see why the agentic path may be
+ * loop and reports the shapes/errors, so we can see why the agentic path may be
  * degrading without access to gateway/Worker logs. Triggered via the "/diag"
  * question. Contains no secrets.
  */
@@ -307,9 +307,9 @@ export async function copilotDiag(env: Env, db: DB, householdId: number): Promis
   const provider = (env.HFOS_COPILOT_PROVIDER ?? "rules").toLowerCase();
   const transport = pickTransport(env, provider);
   const out: Record<string, unknown> = { provider, transport: transport?.kind ?? null, model: (transport as any)?.model ?? null, has_AI_binding: !!(env as any).AI, gateway_id: env.HFOS_AI_GATEWAY_ID ?? null };
-  if (!transport) { out.note = "No capable transport — need the AI binding (ai-gateway) or ANTHROPIC_API_KEY."; return out; }
+  if (!transport) { out.note = "No capable transport: need the AI binding (ai-gateway) or ANTHROPIC_API_KEY."; return out; }
 
-  // Step 1 — one raw round trip with tools, to inspect the response shape.
+  // Step 1: one raw round trip with tools, to inspect the response shape.
   try {
     const body: any = { max_tokens: 300, system: "Test. Call the list_periods tool.", messages: [{ role: "user", content: "List the budget periods." }], tools: COPILOT_TOOLS };
     let raw: any;
@@ -328,7 +328,7 @@ export async function copilotDiag(env: Env, db: DB, householdId: number): Promis
     out.step1_error = String(e?.message ?? e);
   }
 
-  // Step 2 — full agent loop, to see whether it produces a grounded answer.
+  // Step 2: full agent loop, to see whether it produces a grounded answer.
   try {
     const r = await runAgent(env, db, householdId, { system: AGENT_SYSTEM, messages: [{ role: "user", content: "How many budget periods do we have? Use a tool to check." }], tools: COPILOT_TOOLS as unknown as any[], transport });
     out.agent_answer_len = r.answer.length;
@@ -340,7 +340,7 @@ export async function copilotDiag(env: Env, db: DB, householdId: number): Promis
   return out;
 }
 
-/** Pick the capable transport for agentic reasoning (needs Claude — the free model can't tool-use). */
+/** Pick the capable transport for agentic reasoning (needs Claude, since the free model can't tool-use). */
 export function pickTransport(env: Env, provider: string): Transport | null {
   const hasAI = !!(env as any).AI;
   const hasKey = !!(env as any).ANTHROPIC_API_KEY;
@@ -382,7 +382,7 @@ type CopilotAttempt = { name: string; run: (facts: unknown) => Promise<string> }
  * upgrades to an LLM phrasing when a provider is configured and available.
  *
  * Providers (HFOS_COPILOT_PROVIDER):
- *   "auto"        cost-first — free native Workers AI on every request, spilling
+ *   "auto"        cost-first: free native Workers AI on every request, spilling
  *                 over to Claude (AI Gateway) only when the native call fails
  *                 (e.g. the daily free-tier allowance is spent), then rules.
  *   "ai-gateway"  Claude first, degrading to the native model, then rules.
@@ -414,7 +414,7 @@ export async function copilotAnswer(
   if (provider === "rules") return rule;
 
   // 1) Agentic path (primary): Claude drives read-only tools over ALL the data.
-  //    Needs a capable transport — the free native model can't tool-use reliably.
+  //    Needs a capable transport, as the free native model can't tool-use reliably.
   const transport = pickTransport(env, provider);
   if (transport) {
     try {

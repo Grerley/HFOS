@@ -42,8 +42,8 @@ const STATUS_STYLE: Record<string, { label: string; cls: string; icon: string }>
   fully_paid: { label: "Paid", cls: "bg-emerald-50 text-emerald-700", icon: "●" },
   overpaid: { label: "Overpaid", cls: "bg-purple-50 text-purple-700", icon: "▲" },
   overdue: { label: "Overdue", cls: "bg-red-50 text-red-700", icon: "!" },
-  cancelled: { label: "Cancelled", cls: "bg-muted text-ink-muted line-through", icon: "—" },
-  not_applicable: { label: "N/A", cls: "bg-muted text-ink-muted", icon: "—" },
+  cancelled: { label: "Cancelled", cls: "bg-muted text-ink-muted line-through", icon: "–" },
+  not_applicable: { label: "N/A", cls: "bg-muted text-ink-muted", icon: "–" },
 };
 
 function StatusBadge({ status, overdue }: { status: string; overdue: boolean }) {
@@ -209,7 +209,7 @@ export default function PaymentsPage() {
           )}
 
           {view === "calendar" && data && (
-            <Card title="Payment calendar" subtitle="Obligations by due date — click an item to record a payment">
+            <Card title="Payment calendar" subtitle="Obligations by due date. Click an item to record a payment">
               <PaymentCalendar
                 lines={data.lines}
                 today={data.today}
@@ -288,11 +288,11 @@ export default function PaymentsPage() {
                           {l.overpaid_cents > 0 && <div className="text-xs text-purple-600">+{formatMoney(l.overpaid_cents, CUR)}</div>}
                         </td>
                         <td className="py-2 pr-3"><StatusBadge status={l.status} overdue={l.is_overdue} /></td>
-                        <td className="py-2 pr-3 text-ink-muted">{l.due_date ?? "—"}</td>
+                        <td className="py-2 pr-3 text-ink-muted">{l.due_date ?? "–"}</td>
                         <td className="py-2 pr-3 text-xs text-ink-muted">
-                          {PAYMENT_TYPE_LABEL[l.payment_type ?? ""] ?? (l.is_debit_order ? "Debit order" : l.is_manual_payment ? "Manual payment" : "—")}
+                          {PAYMENT_TYPE_LABEL[l.payment_type ?? ""] ?? (l.is_debit_order ? "Debit order" : l.is_manual_payment ? "Manual payment" : "–")}
                         </td>
-                        <td className="py-2 pr-3 text-ink-muted">{l.responsible_member_name ?? "—"}</td>
+                        <td className="py-2 pr-3 text-ink-muted">{l.responsible_member_name ?? "–"}</td>
                         <td className="py-2 text-right">
                           {l.outstanding_cents > 0 ? (
                             <div className="flex items-center justify-end gap-1">
@@ -432,7 +432,7 @@ function ExpandedRow({ line, history, members, accounts, onChanged, onAddPayment
           <Field label="Due date"><Input type="date" value={cfg.due_date} onChange={(e) => setCfg({ ...cfg, due_date: e.target.value })} /></Field>
           <Field label="Responsible">
             <Select value={cfg.responsible_member_id} onChange={(e) => setCfg({ ...cfg, responsible_member_id: e.target.value })}>
-              <option value="">—</option>
+              <option value="">–</option>
               {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </Select>
           </Field>
@@ -487,7 +487,7 @@ function AddPaymentModal({ line, prefill, members, accounts, onClose, onSaved }:
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl bg-card p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-sm font-semibold text-ink">Record payment — {line.item_name}</h3>
+        <h3 className="text-sm font-semibold text-ink">Record payment: {line.item_name}</h3>
         <p className="mb-4 text-xs text-ink-muted">
           Planned {formatMoney(line.planned_cents, CUR)} · Outstanding {formatMoney(line.outstanding_cents, CUR)}
         </p>
@@ -501,12 +501,12 @@ function AddPaymentModal({ line, prefill, members, accounts, onClose, onSaved }:
           </Field>
           <Field label="Paid by">
             <Select value={form.paid_by_member_id} onChange={(e) => setForm({ ...form, paid_by_member_id: e.target.value })}>
-              <option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              <option value="">–</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </Select>
           </Field>
           <Field label="Source account">
             <Select value={form.source_account_id} onChange={(e) => setForm({ ...form, source_account_id: e.target.value })}>
-              <option value="">—</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              <option value="">–</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </Select>
           </Field>
           <Field label="Reference"><Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} /></Field>
@@ -514,7 +514,7 @@ function AddPaymentModal({ line, prefill, members, accounts, onClose, onSaved }:
             <Field label="Notes"><Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={remaining > 0 ? "Reason for partial payment…" : ""} /></Field>
           </div>
           <div className="col-span-2 text-xs text-ink-muted">
-            {remaining > 0 ? `Will remain partially paid — ${formatMoney(remaining, CUR)} outstanding.` : remaining < 0 ? `This overpays by ${formatMoney(-remaining, CUR)}.` : "This settles the expense in full."}
+            {remaining > 0 ? `Will remain partially paid, ${formatMoney(remaining, CUR)} outstanding.` : remaining < 0 ? `This overpays by ${formatMoney(-remaining, CUR)}.` : "This settles the expense in full."}
           </div>
           <div className="col-span-2 flex justify-end gap-2">
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -593,15 +593,15 @@ function ConfirmDebitModal({ line, onClose, onSaved }: { line: SettleLine; onClo
   }
 
   const opts: [typeof outcome, string][] = [
-    ["confirmed", `Yes — went off as expected (${formatMoney(line.outstanding_cents, CUR)})`],
-    ["different", "Yes — but a different amount"],
-    ["failed", "No — failed / not debited"],
+    ["confirmed", `Yes, went off as expected (${formatMoney(line.outstanding_cents, CUR)})`],
+    ["different", "Yes, but a different amount"],
+    ["failed", "No, failed / not debited"],
   ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl bg-card p-6 shadow-card" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-sm font-semibold text-ink">Confirm {typeLabel.toLowerCase()} — {line.item_name}</h3>
+        <h3 className="text-sm font-semibold text-ink">Confirm {typeLabel.toLowerCase()}: {line.item_name}</h3>
         <p className="mb-4 text-xs text-ink-muted">Did this {typeLabel.toLowerCase()} go off?</p>
         <form onSubmit={submit} className="space-y-3">
           <div className="space-y-2">

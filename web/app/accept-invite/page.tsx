@@ -42,12 +42,12 @@ export default function AcceptInvitePage() {
     try {
       const res = await api.post<any>(`/invites/${token}/accept`, { name, password });
       if (res?.access_token) {
-        // New account — auto sign-in.
+        // New account: auto sign-in.
         setToken(res.access_token);
         setHouseholdId(res.households?.[0]?.id ?? null);
         router.replace("/dashboard");
       } else {
-        // Existing account — must sign in.
+        // Existing account: must sign in.
         setAddedMessage(res?.message || "You've been added to the household. Please sign in.");
       }
     } catch (err: any) {

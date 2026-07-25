@@ -17,7 +17,7 @@ const COMMON_PASSWORDS = new Set([
 export function validatePassword(password: string, email?: string): string | null {
   if (!password || password.length < MIN_LENGTH) return `Password must be at least ${MIN_LENGTH} characters.`;
   if (password.length > MAX_LENGTH) return "Password is too long.";
-  if (COMMON_PASSWORDS.has(password.toLowerCase())) return "That password is too common — please choose a stronger one.";
+  if (COMMON_PASSWORDS.has(password.toLowerCase())) return "That password is too common. Please choose a stronger one.";
   const local = (email ?? "").split("@")[0]?.toLowerCase();
   if (local && local.length >= 3 && password.toLowerCase().includes(local)) {
     return "Password must not contain the name part of your email.";

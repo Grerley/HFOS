@@ -220,12 +220,12 @@ export default function PlannerPage() {
   async function generateInsights() {
     if (!periodId) return;
     await api.post(`/insights/generate/${periodId}`);
-    alert("Insights generated — see the Dashboard.");
+    alert("Insights generated. See the Dashboard.");
   }
 
   if (loading && !periods.length) return <AppShell><PageSkeleton /></AppShell>;
 
-  const catName = (id: number) => catMap.get(id)?.name || "—";
+  const catName = (id: number) => catMap.get(id)?.name || "–";
   const dirty = rows.some((r) => r._dirty || r._new) || deletes.length > 0;
 
   // Tabs: every section plus an "Other" bucket if any line can't be mapped.
@@ -269,7 +269,7 @@ export default function PlannerPage() {
         <div className="space-y-4">
           <p className="text-sm text-ink-soft">
             This re-syncs the due date for any line that already has a due day. Optionally, set a default
-            day below to also seed it onto payable lines (expenses, savings, investments) that have none —
+            day below to also seed it onto payable lines (expenses, savings, investments) that have none,
             as a starting point you can adjust per line afterwards. Income lines are never touched, and
             locked periods are skipped.
           </p>
@@ -340,7 +340,7 @@ export default function PlannerPage() {
             title="Budget lines"
             subtitle={
               locked
-                ? "Period is locked — unlock via status to edit"
+                ? "Period is locked. Unlock via status to edit"
                 : `${activeName}: ${formatMoney(plannedFor(activeSection), currency)} planned across ${visibleRows.length} line${visibleRows.length === 1 ? "" : "s"}`
             }
             actions={
@@ -421,17 +421,17 @@ export default function PlannerPage() {
                         )}
                       </td>
                       <td className="py-1.5 pr-3">
-                        {locked ? (members.find((m) => m.id === r.owner_member_id)?.name || "—") : (
+                        {locked ? (members.find((m) => m.id === r.owner_member_id)?.name || "–") : (
                           <Select value={r.owner_member_id ?? ""} onChange={(e) => editRow(r.id, { owner_member_id: e.target.value ? Number(e.target.value) : null })}>
-                            <option value="">—</option>
+                            <option value="">–</option>
                             {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                           </Select>
                         )}
                       </td>
                       <td className="py-1.5 pr-3">
-                        {locked ? (r.due_day ? `Day ${r.due_day}` : "—") : (
+                        {locked ? (r.due_day ? `Day ${r.due_day}` : "–") : (
                           <Input
-                            type="number" min={1} max={31} placeholder="—"
+                            type="number" min={1} max={31} placeholder="–"
                             defaultValue={r.due_day ?? ""}
                             onChange={(e) => {
                               const v = e.target.value ? Math.max(1, Math.min(31, Number(e.target.value))) : null;
@@ -443,7 +443,7 @@ export default function PlannerPage() {
                         )}
                       </td>
                       <td className="py-1.5 pr-3">
-                        {locked ? (PAYMENT_TYPE_OPTIONS.find((o) => o.value === (r.payment_type ?? "manual"))?.label ?? "—") : (
+                        {locked ? (PAYMENT_TYPE_OPTIONS.find((o) => o.value === (r.payment_type ?? "manual"))?.label ?? "–") : (
                           <Select
                             value={r.payment_type ?? "manual"}
                             onChange={(e) => editRow(r.id, { payment_type: e.target.value })}

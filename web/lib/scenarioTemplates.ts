@@ -49,7 +49,7 @@ export function blankDraft(): ScenarioDraft {
 
 // Which input fields each event kind exposes, and a human label.
 export const EVENT_TYPES: { kind: string; label: string; fields: string[]; help?: string }[] = [
-  { kind: "income_delta", label: "Income change", fields: ["month", "pct", "amount"], help: "A raise, a cut, or a job loss — applies from that month onward. Use a % (e.g. −50 to lose one salary) and/or a rand amount." },
+  { kind: "income_delta", label: "Income change", fields: ["month", "pct", "amount"], help: "A raise, a cut, or a job loss that applies from that month onward. Use a % (e.g. −50 to lose one salary) and/or a rand amount." },
   { kind: "expense_delta", label: "Living-cost change", fields: ["month", "pct", "amount"], help: "A step change in monthly living costs from that month." },
   { kind: "one_off_income", label: "One-off income (bonus / windfall)", fields: ["month", "amount"], help: "A single cash inflow in one month." },
   { kind: "one_off_expense", label: "One-off expense", fields: ["month", "amount"], help: "A single big cost in one month." },
@@ -175,7 +175,7 @@ export const TEMPLATES: ScenarioTemplate[] = [
   {
     id: "job_loss",
     title: "Job loss / income shock",
-    blurb: "Lose one salary for a while, then recover — see how long your cash lasts.",
+    blurb: "Lose one salary for a while, then recover. See how long your cash lasts.",
     build: () => ({
       ...blankDraft(),
       name: "If we lose one salary",
@@ -190,7 +190,7 @@ export const TEMPLATES: ScenarioTemplate[] = [
   {
     id: "buy_home",
     title: "Buy a home",
-    blurb: "Deposit + bond repayment + rates — model the net-worth impact over 10 years.",
+    blurb: "Deposit + bond repayment + rates: model the net-worth impact over 10 years.",
     build: () => ({
       ...blankDraft(),
       name: "Buy a home",
@@ -220,7 +220,7 @@ export const TEMPLATES: ScenarioTemplate[] = [
   {
     id: "fire",
     title: "Aggressive saving (FIRE)",
-    blurb: "Cut spending and raise contributions — track the path to a bigger net worth.",
+    blurb: "Cut spending and raise contributions to track the path to a bigger net worth.",
     build: () => ({
       ...blankDraft(),
       name: "Aggressive saving",

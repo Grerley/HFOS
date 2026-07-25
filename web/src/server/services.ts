@@ -285,11 +285,11 @@ export function deriveDueDate(
 /**
  * One-off backfill so existing lines (created before due days existed) get due
  * dates without hand-editing each one:
- *   · SYNC — any line that already has a due_day gets its due_date (re)derived.
- *   · SEED — if defaultDueDay is given, payable (outflow) lines that have no due
+ *   · SYNC: any line that already has a due_day gets its due_date (re)derived.
+ *   · SEED: if defaultDueDay is given, payable (outflow) lines that have no due
  *     day are assigned it as a sensible starting point, then their date derived.
  * Income lines are never seeded (they aren't "due"). Locked periods are skipped.
- * Nothing is invented silently — seeding only happens when the caller opts in
+ * Nothing is invented silently; seeding only happens when the caller opts in
  * with an explicit day, and every value stays editable afterwards.
  */
 export async function backfillDueDates(db: DB, householdId: number, actorUserId: number, defaultDueDay?: number | null) {

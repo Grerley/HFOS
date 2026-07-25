@@ -1,4 +1,4 @@
-/** Excel workbook import — SheetJS port of the Python importer.
+/** Excel workbook import: SheetJS port of the Python importer.
  * Classifies sheets, parses monthly budgets, maps owners/sections, imports
  * idempotently, and returns a reconciliation report + review queue. */
 import * as XLSX from "xlsx";

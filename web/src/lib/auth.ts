@@ -1,4 +1,4 @@
-/** JWT access tokens via jose (HS256) — Workers-native. */
+/** JWT access tokens via jose (HS256), Workers-native. */
 import { SignJWT, jwtVerify } from "jose";
 
 const ACCESS_TOKEN_SECONDS = 720 * 60;

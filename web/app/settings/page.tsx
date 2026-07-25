@@ -155,8 +155,8 @@ function SettingsInner() {
       const r = await api.post<any>("/reminders/send-now", {});
       if (r.sent) {
         const via = [r.emails_sent ? "email" : null, r.whatsapp_sent ? "WhatsApp" : null].filter(Boolean).join(" + ");
-        setReminderMsg(`Sent via ${via} — ${r.overdue_count} overdue, ${r.due_soon_count} due soon.`);
-      } else if (r.reason === "nothing_due") setReminderMsg("Nothing overdue or due within 3 days — no reminder needed right now.");
+        setReminderMsg(`Sent via ${via}: ${r.overdue_count} overdue, ${r.due_soon_count} due soon.`);
+      } else if (r.reason === "nothing_due") setReminderMsg("Nothing overdue or due within 3 days, so no reminder needed right now.");
       else if (r.reason === "not_configured") setReminderMsg(`No channel is configured yet. A live digest would include ${r.overdue_count} overdue and ${r.due_soon_count} due-soon items.`);
       else setReminderMsg(`Not sent (${r.reason ?? "unknown"}).`);
     } catch (e: any) { setReminderMsg(e.message); }
@@ -323,7 +323,7 @@ function SettingsInner() {
               <p className="mt-2 rounded-lg bg-positive/10 px-3 py-2 text-xs text-positive">Invitation emailed. They'll set their own password via a secure link (expires in 7 days).</p>
             ) : (
               <div className="mt-2 rounded-lg bg-info/10 px-3 py-2 text-xs text-info">
-                <p className="font-medium">Email isn't configured yet — share this secure invite link (expires in 7 days):</p>
+                <p className="font-medium">Email isn't configured yet. Share this secure invite link (expires in 7 days):</p>
                 <div className="mt-1 flex items-center gap-2">
                   <input readOnly value={inviteResult.invite_link ?? ""} className="w-full rounded border border-line bg-card px-2 py-1 text-ink" onFocus={(e) => e.target.select()} />
                   <button type="button" onClick={() => inviteResult.invite_link && navigator.clipboard?.writeText(inviteResult.invite_link)} className="shrink-0 rounded border border-current px-2 py-1 font-medium">Copy</button>
@@ -342,7 +342,7 @@ function SettingsInner() {
         <Card title="Payment reminders" subtitle="Daily digest of overdue & soon-due payments">
           <p className="mb-3 text-sm text-ink-soft">
             Managing members get a daily digest when payments are overdue or due within 3 days, over their chosen channels
-            (Email now; WhatsApp once configured — set each person's channels and number above). Send yourself one now to preview it.
+            (Email now; WhatsApp once configured. Set each person's channels and number above). Send yourself one now to preview it.
           </p>
           <Button variant="ghost" onClick={testReminder} disabled={reminderBusy}>
             {reminderBusy ? "Sending…" : "Send me a test reminder"}
@@ -350,7 +350,7 @@ function SettingsInner() {
           {reminderMsg && <p className="mt-2 text-xs text-ink-muted">{reminderMsg}</p>}
         </Card>
 
-        <Card title="Connect Telegram" subtitle="Ask your copilot from Telegram — each person can link their own phone">
+        <Card title="Connect Telegram" subtitle="Ask your copilot from Telegram. Each person can link their own phone">
           {!tg?.configured ? (
             <p className="text-sm text-ink-soft">
               The Telegram bot isn't set up on the server yet. Once an admin adds the bot token, you'll be able to link
@@ -362,7 +362,7 @@ function SettingsInner() {
                 <div className="space-y-2">
                   <p className="flex items-center gap-2 text-sm text-ink-soft">
                     <Badge tone="positive">Connected</Badge>
-                    {tg.chats.length === 1 ? "1 device is linked" : `${tg.chats.length} devices are linked`} — each gets answers and proactive alerts.
+                    {tg.chats.length === 1 ? "1 device is linked" : `${tg.chats.length} devices are linked`}, and each gets answers and proactive alerts.
                   </p>
                   {tg.chats.map((c) => {
                     const label = c.username ? `@${c.username}` : `chat …${c.chat_id.slice(-4)}`;
@@ -397,7 +397,7 @@ function SettingsInner() {
                 </ol>
                 <p className="text-xs text-ink-muted">
                   Codes are single-use and expire in 15 minutes.
-                  {tg.chats && tg.chats.length > 0 && " Your partner can do steps 1–3 from their own login, or use a code you generate here — either way it links to this same budget."}
+                  {tg.chats && tg.chats.length > 0 && " Your partner can do steps 1–3 from their own login, or use a code you generate here. Either way, it links to this same budget."}
                 </p>
                 {!tgCode ? (
                   <Button onClick={genTelegramCode} disabled={tgBusy}>{tgBusy ? "Generating…" : "Generate link code"}</Button>

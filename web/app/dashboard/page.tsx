@@ -82,7 +82,7 @@ export default function DashboardPage() {
     const bits: string[] = [];
     bits.push(
       p.net_position_cents >= 0
-        ? `Your household is broadly on track — a planned surplus of ${formatMoney(p.net_position_cents, currency)} this month`
+        ? `Your household is broadly on track, with a planned surplus of ${formatMoney(p.net_position_cents, currency)} this month`
         : `Heads up: planned expenses exceed income by ${formatMoney(-p.net_position_cents, currency)} this month`,
     );
     if (sm) {
@@ -104,7 +104,7 @@ export default function DashboardPage() {
         actions={<Badge tone="info">Formula v{data.summary!.formula_version}</Badge>}
       />
 
-      {/* AI CFO briefing (§9.5) — concise, explainable, non-alarmist, actionable. */}
+      {/* AI CFO briefing (§9.5): concise, explainable, non-alarmist, actionable. */}
       <div className="mb-5 rounded-xl border border-line bg-card p-5 shadow-sm">
         <div className="flex items-start gap-3">
           <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-light text-ai" aria-hidden>✦</span>
@@ -122,7 +122,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Payment settlement status (§9.4) — month-to-date operational reality. */}
+      {/* Payment settlement status (§9.4): month-to-date operational reality. */}
       {sm && (
         <Card className="mb-5" title="Payment settlement status" subtitle="Where this month's obligations stand"
           actions={<Link href="/payments" className="text-xs font-medium text-brand-dark hover:underline">Open Payments →</Link>}>
@@ -179,7 +179,7 @@ export default function DashboardPage() {
               onClick={() => openDrill("expenses")}
               className="mt-3 w-full rounded-lg border border-line-soft py-2 text-xs font-medium text-ink-soft hover:bg-muted"
             >
-              + {data.summary!.category_breakdown.length - 10} more categories — view all
+              + {data.summary!.category_breakdown.length - 10} more categories. View all
             </button>
           )}
         </Card>

@@ -77,7 +77,7 @@ export default function ScenariosPage() {
     { key: "horizon_net_worth_cents", label: "Net worth at horizon", fmt: money },
     { key: "net_worth_delta_cents", label: "vs doing nothing", fmt: (v) => `${v >= 0 ? "+" : "−"}${money(Math.abs(v))}`, tone: (v) => (v >= 0 ? "text-positive" : "text-negative") },
     { key: "runway_months", label: "Cash runway", fmt: (v) => (v ? `${v} months` : "safe"), tone: (v) => (v ? "text-negative" : "text-ink") },
-    { key: "break_even_month", label: "Break-even", fmt: (v) => (v ? `month ${v}` : "—") },
+    { key: "break_even_month", label: "Break-even", fmt: (v) => (v ? `month ${v}` : "–") },
     { key: "min_cash_cents", label: "Lowest cash point", fmt: money, tone: (v) => (v < 0 ? "text-negative" : "text-ink") },
     { key: "ending_savings_rate", label: "Ending savings rate", fmt: (v) => formatPercent(v) },
   ];
@@ -88,7 +88,7 @@ export default function ScenariosPage() {
     <AppShell>
       <PageHeader
         title="Scenario planning"
-        description="Project a decision over years — compounding returns, inflation and life events. Scenarios never change your real budgets."
+        description="Project a decision over years: compounding returns, inflation and life events. Scenarios never change your real budgets."
         actions={<Button onClick={openNew} disabled={!periods.length}>New scenario</Button>}
       />
 
@@ -103,11 +103,11 @@ export default function ScenariosPage() {
       />
 
       {!periods.length ? (
-        <EmptyState title="No budget periods yet" hint="Create a monthly budget first — scenarios build on a base month." />
+        <EmptyState title="No budget periods yet" hint="Create a monthly budget first. Scenarios build on a base month." />
       ) : (
         <div className="space-y-6">
           {/* Template gallery */}
-          <Card title="Start from a template" subtitle="A ready-made model you can tweak — or build from scratch">
+          <Card title="Start from a template" subtitle="A ready-made model you can tweak, or build from scratch">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {TEMPLATES.map((t) => (
                 <button key={t.id} onClick={() => openTemplate(t.id)}
@@ -121,7 +121,7 @@ export default function ScenariosPage() {
 
           {/* Comparison */}
           {compared.length > 0 && chart && (
-            <Card title="Compare scenarios" subtitle="Net worth trajectory and headline outcomes — select up to 4 below">
+            <Card title="Compare scenarios" subtitle="Net worth trajectory and headline outcomes. Select up to 4 below">
               <ScenarioChart months={chart.months} series={chart.series as any} format={money} height={280} />
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full text-sm">
@@ -175,7 +175,7 @@ export default function ScenariosPage() {
                             {sm.break_even_month && <span>Break-even <span className="tabular font-medium text-ink">m{sm.break_even_month}</span></span>}
                           </div>
                         ) : (
-                          <p className="mt-2 text-xs text-ink-muted">Legacy single-month scenario — open Edit to upgrade it to a multi-year projection.</p>
+                          <p className="mt-2 text-xs text-ink-muted">Legacy single-month scenario. Open Edit to upgrade it to a multi-year projection.</p>
                         )}
                       </div>
                       <div className="flex shrink-0 items-center gap-3">

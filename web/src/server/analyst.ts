@@ -17,7 +17,7 @@ const ANALYST_SYSTEM =
   AGENT_SYSTEM +
   `
 
-PROACTIVE ANALYST MODE. Investigate this household's finances across history using the tools (trends, comparisons, goals, properties, payments, net worth). Identify up to 5 of the MOST important things the household likely has NOT noticed — emerging trends, drift, concentration risk, goals slipping, cash-flow risk, and opportunities. Call record_insight ONCE per distinct finding, quoting the specific figures you found. Prioritise signal over noise — skip the obvious and anything trivial. When done, reply with a one-line summary of what you recorded.`;
+PROACTIVE ANALYST MODE. Investigate this household's finances across history using the tools (trends, comparisons, goals, properties, payments, net worth). Identify up to 5 of the MOST important things the household likely has NOT noticed: emerging trends, drift, concentration risk, goals slipping, cash-flow risk, and opportunities. Call record_insight ONCE per distinct finding, quoting the specific figures you found. Prioritise signal over noise. Skip the obvious and anything trivial. When done, reply with a one-line summary of what you recorded.`;
 
 export async function runInsightAnalyst(env: Env, db: DB, householdId: number): Promise<{ recorded: number; summaries: string[] }> {
   const provider = (env.HFOS_COPILOT_PROVIDER ?? "rules").toLowerCase();

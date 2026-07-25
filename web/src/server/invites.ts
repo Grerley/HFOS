@@ -80,7 +80,7 @@ export async function acceptInvite(db: DB, token: string, p: { name?: string; pa
   if (!info) throw new HttpError(404, "This invite link is invalid.");
   const inv = info._inv;
   if (inv.accepted_at) throw new HttpError(409, "This invite has already been accepted.");
-  if (inv.expires_at < nowSec()) throw new HttpError(410, "This invite has expired — please ask for a new one.");
+  if (inv.expires_at < nowSec()) throw new HttpError(410, "This invite has expired. Please ask for a new one.");
 
   let user = (await db.select().from(users).where(eq(users.email, inv.email))).at(0);
   const created = !user;

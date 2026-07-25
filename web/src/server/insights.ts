@@ -241,10 +241,10 @@ export async function answerQuestion(db: DB, householdId: number, question: stri
     const top = summary.category_breakdown.slice(0, 3).map((c) => `${c.category_name} (${zar(c.amount_cents)})`).join(", ");
     answer = `Planned expenses total ${zar(planned.total_expenses_cents)} against income ${zar(planned.total_income_cents)}, leaving ${zar(planned.net_position_cents)}. Biggest categories: ${top}.`;
   } else if (intent === "savings_track") {
-    answer = `Your savings rate this period is ${(planned.savings_rate * 100).toFixed(1)}% (${zar(planned.total_savings_cents)} of ${zar(planned.total_income_cents)} income). ${planned.savings_rate >= LOW_SAVINGS_RATE ? "That's at or above the 10% guideline." : "That's below the 10% guideline — consider lifting a contribution line."}`;
+    answer = `Your savings rate this period is ${(planned.savings_rate * 100).toFixed(1)}% (${zar(planned.total_savings_cents)} of ${zar(planned.total_income_cents)} income). ${planned.savings_rate >= LOW_SAVINGS_RATE ? "That's at or above the 10% guideline." : "That's below the 10% guideline, so consider lifting a contribution line."}`;
   } else if (intent === "afford") {
     const net = planned.net_position_cents;
-    answer = `Your planned monthly surplus is ${zar(net)}. ${net > 0 ? "There is room to take on a new obligation within that surplus." : "There is no surplus to absorb a new obligation — model it as a scenario first."} Use the scenario simulator to test a specific amount.`;
+    answer = `Your planned monthly surplus is ${zar(net)}. ${net > 0 ? "There is room to take on a new obligation within that surplus." : "There is no surplus to absorb a new obligation, so model it as a scenario first."} Use the scenario simulator to test a specific amount.`;
   } else if (intent === "windfall") {
     answer = `Allocate a windfall by priority: (1) top up the emergency fund, (2) settle high-interest debt, (3) fund goals nearing their target, (4) invest the remainder. Create a bonus allocation under Goals to plan it, then check the effect against your surplus of ${zar(planned.net_position_cents)}.`;
   } else if (intent === "what_changed") {
