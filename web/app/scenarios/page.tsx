@@ -112,8 +112,7 @@ export default function ScenariosPage() {
               {TEMPLATES.map((t) => (
                 <button key={t.id} onClick={() => openTemplate(t.id)}
                   className="rounded-xl border border-line bg-card p-4 text-left transition hover:border-brand hover:shadow-sm">
-                  <div className="text-2xl">{t.icon}</div>
-                  <div className="mt-1 text-sm font-semibold text-ink">{t.title}</div>
+                  <div className="text-sm font-semibold text-ink">{t.title}</div>
                   <div className="mt-1 text-xs text-ink-muted">{t.blurb}</div>
                 </button>
               ))}
