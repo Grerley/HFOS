@@ -1,9 +1,25 @@
 /** Scenario engine + explainable rule-based copilot (LLM extension point). */
+import { eq } from "drizzle-orm";
 import type { DB } from "../db/client";
+import { accounts, properties } from "../db/schema";
 import * as calc from "../lib/calc";
 import { loadLinesForCalc } from "./services";
 
 const ASSUMPTION_SCHEMA_VERSION = 1;
+
+// Account-type buckets for the projection's starting balance sheet.
+const CASH_TYPES = new Set(["bank", "cash", "savings_pocket"]);
+const INVEST_TYPES = new Set(["investment"]);
+const LIAB_TYPES = new Set(["loan", "credit_card"]);
+
+// Sensible South-African defaults when the caller omits a global assumption.
+export const SCENARIO_DEFAULTS = {
+  horizon_months: 60,
+  annual_inflation: 0.05,
+  annual_income_growth: 0.05,
+  annual_investment_return: 0.10,
+  annual_cash_return: 0.04,
+};
 const LOW_SAVINGS_RATE = 0.1;
 const OVERSPEND_PCT = 0.1;
 
@@ -77,6 +93,58 @@ export async function runScenario(
     projected,
     deltas: calc.scenarioDelta(base as any, projected as any),
   };
+}
+
+// ── Scenario v2: multi-year projection ───────────────────────────────────────
+/** Assemble the projection's starting state from the base period + balance sheet. */
+export async function scenarioStartState(db: DB, householdId: number, basePeriodId: number | null): Promise<calc.ScenarioStart> {
+  let income = 0, expenseLiving = 0, contribution = 0;
+  if (basePeriodId) {
+    const s = calc.periodSummary(await loadLinesForCalc(db, householdId, basePeriodId)).planned;
+    income = s.total_income_cents;
+    contribution = s.total_savings_cents;              // savings/investment outflow (a subset of expenses)
+    expenseLiving = s.total_expenses_cents - s.total_savings_cents; // pure living expenses
+  }
+  const accRows = await db.select().from(accounts).where(eq(accounts.household_id, householdId));
+  const sumBy = (pred: (t: string) => boolean) => accRows.filter((a) => pred(a.type)).reduce((t, a) => t + a.current_balance_cents, 0);
+  const propRows = await db.select().from(properties).where(eq(properties.household_id, householdId));
+  const propertyEquity = propRows.reduce((t, pr) => t + calc.propertyEquity(pr.market_value_cents, pr.outstanding_bond_cents, pr.ownership_share_bp), 0);
+  return {
+    monthly_income_cents: income,
+    monthly_expense_cents: expenseLiving,
+    monthly_contribution_cents: contribution,
+    cash_cents: sumBy((t) => CASH_TYPES.has(t)),
+    investments_cents: sumBy((t) => INVEST_TYPES.has(t)),
+    liabilities_cents: sumBy((t) => LIAB_TYPES.has(t)),
+    other_net_worth_cents: propertyEquity,
+  };
+}
+
+/** Is this an v2 (projection) assumption payload vs the legacy single-month one? */
+export function isProjectionAssumptions(a: Record<string, any> | null | undefined): boolean {
+  return !!a && (Array.isArray(a.events) || a.horizon_months != null || a.version === 2 || a.schema_version === 2);
+}
+
+export async function runScenarioV2(db: DB, householdId: number, basePeriodId: number | null, assumptions: Record<string, any>) {
+  const start = await scenarioStartState(db, householdId, basePeriodId);
+  const a: calc.ScenarioAssumptions = {
+    horizon_months: Number(assumptions.horizon_months ?? SCENARIO_DEFAULTS.horizon_months),
+    annual_inflation: numOr(assumptions.annual_inflation, SCENARIO_DEFAULTS.annual_inflation),
+    annual_income_growth: numOr(assumptions.annual_income_growth, SCENARIO_DEFAULTS.annual_income_growth),
+    annual_investment_return: numOr(assumptions.annual_investment_return, SCENARIO_DEFAULTS.annual_investment_return),
+    annual_cash_return: numOr(assumptions.annual_cash_return, SCENARIO_DEFAULTS.annual_cash_return),
+    events: Array.isArray(assumptions.events) ? assumptions.events.filter((e: any) => e && Number(e.month) >= 1) : [],
+  };
+  return calc.runProjection(start, a);
+}
+
+const numOr = (v: any, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d);
+
+/** Dispatch to the projection engine for v2 payloads, else the legacy engine. */
+export async function runScenarioAny(db: DB, householdId: number, basePeriodId: number | null, assumptions: Record<string, any>) {
+  return isProjectionAssumptions(assumptions)
+    ? runScenarioV2(db, householdId, basePeriodId, assumptions)
+    : runScenario(db, householdId, basePeriodId, assumptions);
 }
 
 // ── Insights ────────────────────────────────────────────────────────────────

@@ -70,10 +70,29 @@ Base URL (dev): `http://localhost:8000` · Interactive OpenAPI docs: `/docs` · 
 |---|---|---|
 | GET/POST | `/goals`, PATCH/DELETE `/goals/{id}` | goals with computed progress, amount remaining, monthly requirement & shortfall, projected finish date, and pace (on_track/behind/overdue/…) |
 | GET/POST | `/scenarios` | list / create+run a scenario |
+| GET | `/scenarios/start-state` | `?base_period_id=` → the projection's starting flows + balance sheet |
+| POST | `/scenarios/preview` | run a projection without saving (powers the wizard's live preview) |
+| PATCH/DELETE | `/scenarios/{id}` | update (re-runs on change) / delete |
 | POST | `/scenarios/{id}/run` | re-run |
-| GET | `/scenarios/{id}/compare` | baseline vs projected + deltas |
+| GET | `/scenarios/{id}/compare` | full projection (baseline vs scenario + summary) |
 
-### Scenario assumption keys (all optional, versioned JSON)
+### Scenario assumptions — v2 (multi-year projection, `version: 2`)
+
+Global (all optional; SA defaults applied server-side): `horizon_months`,
+`annual_inflation`, `annual_income_growth`, `annual_investment_return`,
+`annual_cash_return` (rates are fractions, e.g. `0.05`). Plus `events: []`, each
+`{ month, kind, … }` where `kind` is one of `income_delta`, `expense_delta`,
+`contribution_delta`, `one_off_income`, `one_off_expense`, `debt_extra_payment`,
+`recurring_income`, `recurring_expense` (with optional `end_month`),
+`lump_sum_invest`, `property_purchase` (`price_cents`, `deposit_cents`,
+`annual_rate`, `term_months`, `rent_cents`), `property_sale` (`price_cents` =
+proceeds, `clears_liability_cents`). Deltas take `pct` (fraction) and/or
+`amount_cents`. The engine returns the full month-by-month trajectory (income,
+expenses, cash, investments, liabilities, net worth) for both the scenario and a
+do-nothing baseline, plus a summary (horizon net worth, net-worth delta, cash
+runway, lowest cash point, break-even month, ending savings rate).
+
+### Scenario assumptions — v1 (legacy single-month; still supported)
 
 `income_change_pct`, `expense_change_pct`, `additional_income_cents`,
 `new_monthly_expense_cents`, `savings_increase_cents`,
