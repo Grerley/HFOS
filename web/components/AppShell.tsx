@@ -98,8 +98,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Desktop sidebar */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-card md:flex">
         <div className="px-5 py-5">
-          <Link href="/dashboard" className="inline-flex text-ink" aria-label="HFOS home">
-            <Logo size={30} tagline />
+          <Link href="/dashboard" className="inline-flex" aria-label="HFOS home">
+            <Logo size={40} />
           </Link>
         </div>
         <nav aria-label="Primary" className="flex-1 space-y-1 overflow-y-auto px-3">
@@ -182,8 +182,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Mobile header */}
         <header className="flex items-center justify-between border-b border-line bg-card px-4 py-3 md:hidden">
-          <Link href="/dashboard" className="inline-flex text-ink" aria-label="HFOS home">
-            <Logo size={26} />
+          <Link href="/dashboard" className="inline-flex" aria-label="HFOS home">
+            <Logo size={28} />
           </Link>
           <div className="flex items-center gap-2">
             <ThemeControls />
