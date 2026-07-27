@@ -114,7 +114,7 @@ export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) => mutate<T>("POST", path, body),
   patch: <T>(path: string, body?: unknown) => mutate<T>("PATCH", path, body),
-  del: <T>(path: string) => mutate<T>("DELETE", path),
+  del: <T>(path: string, body?: unknown) => mutate<T>("DELETE", path, body),
 
   // Multipart upload (workbook import): no JSON content-type.
   async upload<T>(path: string, form: FormData): Promise<T> {

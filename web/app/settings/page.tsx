@@ -3,7 +3,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppShell, { PageHeader } from "@/components/AppShell";
 import { Button, Card, Field, Input, Select, Badge, PageSkeleton, ErrorState } from "@/components/ui";
-import { api, getHouseholdId } from "@/lib/api";
+import { api, getHouseholdId, logout } from "@/lib/api";
 import { useCurrency } from "@/lib/currency";
 import { formatMoney, toCents } from "@/lib/format";
 import { SETTINGS_TABS } from "@/lib/settingsTabs";
@@ -81,6 +81,27 @@ function SettingsInner() {
     if (!confirm("Disconnect ALL Telegram devices? Nobody will get answers or alerts until they reconnect.")) return;
     try { await api.del("/telegram/link"); setTgCode(null); await loadTelegram(); }
     catch (e: any) { alert(e.message); }
+  }
+
+  async function exportData() {
+    try {
+      const data = await api.get<any>("/account/export");
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "hfos-data-export.json"; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) { alert(e.message); }
+  }
+  async function deleteAccount() {
+    const pw = prompt("This permanently deletes your account, and erases any household only you belong to. Enter your password to confirm:");
+    if (!pw) return;
+    if (!confirm("Are you absolutely sure? This cannot be undone.")) return;
+    try {
+      await api.del("/account", { password: pw, confirm: "DELETE" });
+      logout();
+      window.location.href = "/login";
+    } catch (e: any) { alert(e.message); }
   }
 
   async function saveHousehold(e: React.FormEvent) {
@@ -255,6 +276,20 @@ function SettingsInner() {
               </div>
             )}
           </form>
+        </Card>
+
+        <Card title="Data & privacy" subtitle="Export your data, or delete your account">
+          <div className="space-y-4 text-sm">
+            <div>
+              <p className="text-ink-soft">Download a full copy of this household's data (accounts, budgets, transactions, goals and more) as a JSON file.</p>
+              <div className="mt-2"><Button variant="ghost" onClick={exportData}>Export my data</Button></div>
+            </div>
+            <div className="border-t border-line-soft pt-4">
+              <p className="font-medium text-negative">Delete account</p>
+              <p className="mt-1 text-ink-soft">Permanently deletes your account. Any household only you belong to is erased with it. This cannot be undone.</p>
+              <button onClick={deleteAccount} className="mt-2 rounded-lg border border-negative px-3 py-1.5 text-sm font-medium text-negative hover:bg-negative/10">Delete my account</button>
+            </div>
+          </div>
         </Card>
       </div>
       )}

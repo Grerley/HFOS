@@ -63,6 +63,7 @@ import {
 import { cashFlowForecast } from "./cashflow";
 import { copilotAnswer, loadHistory, pruneHistory, saveTurn } from "./copilot";
 import { runInsightAnalyst } from "./analyst";
+import { deleteUserAccount, exportHousehold } from "./account";
 import {
   createTelegramLinkCode,
   handleTelegramUpdate,
@@ -283,6 +284,34 @@ route("GET", "/auth/me", async (req) => {
   const ctx = await requireAuth(req);
   const user = (await ctx.db.select().from(users).where(eq(users.id, ctx.userId))).at(0)!;
   return tokenResponse(ctx.db, user);
+});
+
+// ── Account data rights (POPIA / GDPR) ────────────────────────────────────────
+// Export the active household's full dataset as JSON (data portability).
+route("GET", "/account/export", async (req) => {
+  const ctx = await requireAuth(req);
+  const data = await exportHousehold(ctx.db, ctx.householdId);
+  return new Response(JSON.stringify(data, null, 2), {
+    status: 200,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "content-disposition": `attachment; filename="hfos-export-household-${ctx.householdId}.json"`,
+    },
+  });
+});
+// Permanently delete the caller's account. Requires the current password and an
+// explicit confirmation. Households left with no members are purged entirely.
+route("DELETE", "/account", async (req) => {
+  const ctx = await requireAuth(req);
+  const p = await body(req);
+  if (p?.confirm !== "DELETE") throw new HttpError(400, 'Confirmation required: send { "confirm": "DELETE" }.');
+  const user = (await ctx.db.select().from(users).where(eq(users.id, ctx.userId))).at(0);
+  if (!user) throw new HttpError(404, "User not found");
+  if (!p?.password || !(await verifyPassword(String(p.password), user.password_hash))) {
+    throw new HttpError(403, "Password is incorrect.");
+  }
+  await deleteUserAccount(ctx.db, ctx.userId);
+  return json({ ok: true });
 });
 
 // ── Households & members ──────────────────────────────────────────────────────

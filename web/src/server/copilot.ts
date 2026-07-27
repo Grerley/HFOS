@@ -403,8 +403,9 @@ export async function copilotAnswer(
   history: ConvMessage[] = [],
 ) {
   // Hidden diagnostic: type "/diag" in the copilot to see why the agentic path
-  // may be degrading (transport, raw response shape, and any error).
-  if (question.trim().toLowerCase() === "/diag") {
+  // may be degrading (transport, raw response shape, and any error). Off by
+  // default in production; enable with HFOS_DIAG_ENABLED=1 when debugging.
+  if (question.trim().toLowerCase() === "/diag" && (env as any).HFOS_DIAG_ENABLED === "1") {
     const diag = await copilotDiag(env, db, householdId).catch((e: any) => ({ error: String(e?.message ?? e) }));
     return { answer: "```json\n" + JSON.stringify(diag, null, 2) + "\n```", provider: "diag", matched_intent: "diag", grounded: false, citations: [] };
   }

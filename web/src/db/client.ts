@@ -6,6 +6,16 @@ export interface Env {
   DB: D1Database;
   HFOS_SECRET_KEY?: string;
   HFOS_ENCRYPTION_KEY?: string;
+  // Set to "1" to FAIL CLOSED when HFOS_SECRET_KEY is missing/weak (recommended
+  // for production once the real secret is confirmed set).
+  HFOS_ENFORCE_SECRET?: string;
+  // Escape hatch for LOCAL DEV ONLY: set to "1" to silence the insecure-key
+  // warning when HFOS_SECRET_KEY is absent. Never set this in production.
+  HFOS_ALLOW_INSECURE_SECRET?: string;
+  // Gate the hidden copilot "/diag" introspection command (off unless "1").
+  HFOS_DIAG_ENABLED?: string;
+  // Optional Cloudflare Turnstile secret; when set, register/login require a token.
+  TURNSTILE_SECRET_KEY?: string;
   // Copilot LLM provider: "workers-ai" (native, free), "ai-gateway" (Claude via
   // Cloudflare AI Gateway + Unified Billing, no key), "anthropic" (direct API,
   // needs ANTHROPIC_API_KEY), or "rules" (deterministic, no LLM).
@@ -52,6 +62,28 @@ export function getDb(env: Env): DB {
   return drizzle(env.DB, { schema });
 }
 
+const INSECURE_FALLBACK_SECRET = "dev-only-change-me-please-generate-a-real-secret";
+
+/**
+ * The JWT signing secret.
+ *
+ * A strong HFOS_SECRET_KEY (16+ chars, not the placeholder) is always used when
+ * present. When it is absent/weak we can either fail CLOSED (refuse to sign, the
+ * secure default) or fall back to a publicly-known key (INSECURE — anyone could
+ * forge a login). Enforcement is gated so it can be switched on only once the
+ * production secret is confirmed set, without risking a lock-out:
+ *   - HFOS_ENFORCE_SECRET=1  -> fail closed (recommended for production)
+ *   - otherwise              -> serve with the insecure fallback but warn loudly
+ * Local dev may set HFOS_ALLOW_INSECURE_SECRET=1 to silence the warning.
+ */
 export function secret(env: Env): string {
-  return env.HFOS_SECRET_KEY || "dev-only-change-me-please-generate-a-real-secret";
+  const s = env.HFOS_SECRET_KEY;
+  if (s && s !== INSECURE_FALLBACK_SECRET && s.length >= 16) return s;
+  if (env.HFOS_ENFORCE_SECRET === "1") {
+    throw new Error("HFOS_SECRET_KEY is missing or insecure. Set a strong random secret (16+ chars).");
+  }
+  if (env.HFOS_ALLOW_INSECURE_SECRET !== "1") {
+    console.warn("SECURITY: HFOS_SECRET_KEY is not a strong value; using an INSECURE signing key. Set it and HFOS_ENFORCE_SECRET=1 before real users.");
+  }
+  return INSECURE_FALLBACK_SECRET;
 }
