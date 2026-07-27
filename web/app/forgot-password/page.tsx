@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { AUTH } from "@/lib/api";
 import { Button, Field, Input } from "@/components/ui";
+import Logo from "@/components/Logo";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -28,10 +29,7 @@ export default function ForgotPasswordPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <span className="inline-block rounded-lg bg-[#ffffff] p-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-full.png" alt="HFOS" className="block h-auto w-52" />
-          </span>
+          <Logo size={32} tagline className="text-ink" />
         </div>
         <div className="rounded-xl border border-line bg-card p-6 shadow-sm">
           {sent ? (

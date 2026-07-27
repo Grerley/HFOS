@@ -1,14 +1,14 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import Logo from "@/components/Logo";
 
 // Simple public page shell for legal/marketing content (no auth, no AppShell).
 export default function LegalShell({ title, updated, children }: { title: string; updated: string; children: ReactNode }) {
   return (
     <main className="min-h-screen bg-surface text-ink">
       <header className="mx-auto flex max-w-3xl items-center justify-between px-5 py-5">
-        <Link href="/" className="inline-block rounded-lg bg-white p-1.5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-full.png" alt="HFOS" className="block h-7 w-auto" />
+        <Link href="/" className="inline-flex text-ink" aria-label="HFOS home">
+          <Logo size={28} />
         </Link>
         <Link href="/" className="text-sm font-medium text-ink-soft hover:text-ink">Back to home</Link>
       </header>

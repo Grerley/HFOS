@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AUTH, setHouseholdId, setToken } from "@/lib/api";
 import { Button, Field, Input } from "@/components/ui";
+import Logo from "@/components/Logo";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -35,10 +36,7 @@ export default function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <span className="inline-block rounded-lg bg-[#ffffff] p-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-full.png" alt="HFOS" className="block h-auto w-52" />
-          </span>
+          <Logo size={32} tagline className="text-ink" />
           <p className="mt-2 text-sm text-ink-muted">Create your household</p>
         </div>
         <form onSubmit={submit} className="space-y-4 rounded-xl border border-line bg-card p-6 shadow-sm">

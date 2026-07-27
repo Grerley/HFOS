@@ -23,6 +23,12 @@ const config: Config = {
           light: "var(--brand-light)",
           fg: "var(--brand-fg)",
         },
+        accent: {
+          DEFAULT: "var(--accent)",
+          dark: "var(--accent-dark)",
+          light: "var(--accent-light)",
+          fg: "var(--accent-fg)",
+        },
         positive: "var(--positive)",
         negative: "var(--negative)",
         warning: "var(--warning)",
@@ -31,10 +37,12 @@ const config: Config = {
       },
       boxShadow: {
         sm: "0 1px 2px rgba(15,30,52,0.06), 0 1px 3px rgba(15,30,52,0.04)",
-        card: "0 4px 16px rgba(15,30,52,0.06)",
+        card: "0 6px 24px -8px rgba(15,30,52,0.12), 0 2px 6px rgba(15,30,52,0.05)",
+        lift: "0 18px 48px -18px rgba(15,30,52,0.28)",
       },
       fontFamily: {
         sans: ["ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
+        serif: ["ui-serif", "Georgia", "Cambria", "Times New Roman", "serif"],
       },
     },
   },

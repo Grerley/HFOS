@@ -20,13 +20,21 @@
   --text-soft: #33415c;
   --text-muted: #6b7891;
 
-  --brand: #16324f;
-  --brand-dark: #0f2439;
-  --brand-light: #e8eef6;
+  --brand: #1e3a5f;
+  --brand-dark: #142a45;
+  --brand-light: #e9eef6;
   --brand-fg: #ffffff;
 
-  --positive: #0f766e;
-  --negative: #b91c1c;
+  /* Growth green (the logo accent) + the signature gradient. */
+  --accent: #1f9d55;
+  --accent-dark: #167a41;
+  --accent-light: #e7f6ec;
+  --accent-fg: #ffffff;
+  --grad-from: #1f7a4d;
+  --grad-to: #7ac043;
+
+  --positive: #1f9d55;
+  --negative: #c0341d;
   --warning: #b45309;
   --info: #2563eb;
   --ai: #4f46e5;
@@ -46,12 +54,19 @@
   --text-soft: #b7c1d6;
   --text-muted: #8492ab;
 
-  --brand: #5b8fd6;
-  --brand-dark: #bcd3f2;
-  --brand-light: #172742;
+  --brand: #6aa4e8;
+  --brand-dark: #c7dbf6;
+  --brand-light: #16273f;
   --brand-fg: #0a1120;
 
-  --positive: #34d399;
+  --accent: #4ade80;
+  --accent-dark: #86efac;
+  --accent-light: #12331f;
+  --accent-fg: #06210f;
+  --grad-from: #2f9e5a;
+  --grad-to: #86e06b;
+
+  --positive: #4ade80;
   --negative: #f87171;
   --warning: #fbbf24;
   --info: #60a5fa;
@@ -109,6 +124,21 @@ body {
   background-size: 1200px 100%;
   animation: hfos-shimmer 1.4s ease infinite;
   border-radius: 0.5rem;
+}
+
+/* Signature growth gradient (the logo accent), for hero flourishes and CTAs. */
+.accent-gradient { background-image: linear-gradient(120deg, var(--grad-from), var(--grad-to)); }
+.accent-gradient-text {
+  background-image: linear-gradient(120deg, var(--grad-from), var(--grad-to));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+/* Deep navy field used behind hero / marketing sections. */
+.brand-field {
+  background:
+    radial-gradient(1100px 480px at 12% -10%, rgba(122,192,67,0.16), transparent 60%),
+    linear-gradient(160deg, var(--brand-dark), var(--brand) 55%, #24507f);
 }
 
 /* Respect reduced-motion preference (§21, §23). */
