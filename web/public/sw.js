@@ -10,7 +10,7 @@
  *   · Non-GET /api/*: never handled here; the app-level write queue owns
  *     offline mutations (see lib/offline.ts).
  */
-const VERSION = "hfos-v1";
+const VERSION = "hfos-v2";
 const STATIC_CACHE = `${VERSION}-static`;
 const API_CACHE = `${VERSION}-api`;
 const SHELL_CACHE = `${VERSION}-shell`;
@@ -87,6 +87,18 @@ async function cacheFirst(request) {
   return res;
 }
 
+// For fixed-name assets (logos, icons, manifest) whose bytes can change without
+// the URL changing: serve the cached copy fast, but always refresh it in the
+// background so a new logo/icon propagates on the next load.
+async function staleWhileRevalidate(request) {
+  const cache = await caches.open(STATIC_CACHE);
+  const cached = await cache.match(request);
+  const network = fetch(request)
+    .then((res) => { if (res.ok) cache.put(request, res.clone()); return res; })
+    .catch(() => cached);
+  return cached || network;
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return; // writes are handled by the app queue
@@ -101,9 +113,16 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(networkFirstNav(request));
     return;
   }
-  if (url.pathname.startsWith("/_next/static") || url.pathname.startsWith("/icon") ||
-      url.pathname.startsWith("/apple-icon") || url.pathname.endsWith(".png") ||
-      url.pathname.endsWith(".webmanifest") || url.pathname === "/logo-full.png") {
+  // Hashed build assets are immutable: cache-first is safe and fastest.
+  if (url.pathname.startsWith("/_next/static")) {
     event.respondWith(cacheFirst(request));
+    return;
+  }
+  // Fixed-name assets (logos, icons, manifest) can change in place, so keep them
+  // fresh with stale-while-revalidate rather than caching forever.
+  if (url.pathname.startsWith("/icon") || url.pathname.startsWith("/apple-icon") ||
+      url.pathname.endsWith(".png") || url.pathname.endsWith(".svg") ||
+      url.pathname.endsWith(".webmanifest")) {
+    event.respondWith(staleWhileRevalidate(request));
   }
 });
