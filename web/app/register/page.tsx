@@ -36,7 +36,7 @@ export default function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <Logo size={32} tagline className="text-ink" />
+          <Logo size={44} />
           <p className="mt-2 text-sm text-ink-muted">Create your household</p>
         </div>
         <form onSubmit={submit} className="space-y-4 rounded-xl border border-line bg-card p-6 shadow-sm">
