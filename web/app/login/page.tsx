@@ -4,11 +4,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AUTH, setHouseholdId, setToken } from "@/lib/api";
 import { Button, Field, Input } from "@/components/ui";
+import Logo from "@/components/Logo";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("demo@hfos.app");
-  const [password, setPassword] = useState("demo12345");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -31,13 +32,10 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface px-4">
       <div className="w-full max-w-sm">
-        <div className="mb-6 text-center">
-          <span className="inline-block rounded-lg bg-[#ffffff] p-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-full.png" alt="HFOS: Household Financial Operating System" className="block h-auto w-52" />
-          </span>
+        <div className="mb-6 flex justify-center text-ink">
+          <Link href="/" aria-label="HFOS home"><Logo size={32} tagline /></Link>
         </div>
-        <form onSubmit={submit} className="space-y-4 rounded-xl border border-line bg-card p-6 shadow-sm">
+        <form onSubmit={submit} className="space-y-4 rounded-2xl border border-line bg-card p-6 shadow-card">
           <Field label="Email">
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </Field>
@@ -52,10 +50,7 @@ export default function LoginPage() {
             <Link href="/forgot-password" className="text-ink-muted underline hover:text-ink">Forgot password?</Link>
           </p>
           <p className="text-center text-xs text-ink-muted">
-            No account? <Link href="/register" className="text-brand underline">Create household</Link>
-          </p>
-          <p className="text-center text-[11px] text-ink-muted">
-            Demo seed login is pre-filled. Run the seed script to enable it.
+            No account? <Link href="/register" className="font-medium text-brand hover:underline">Create household</Link>
           </p>
         </form>
       </div>

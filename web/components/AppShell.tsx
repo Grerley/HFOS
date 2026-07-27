@@ -8,6 +8,7 @@ import { ThemeControls } from "@/components/theme";
 import OfflineBanner from "@/components/OfflineBanner";
 import { CurrencyContext } from "@/lib/currency";
 import { SETTINGS_TABS } from "@/lib/settingsTabs";
+import Logo from "@/components/Logo";
 
 type NavLeaf = { href: string; label: string; icon: string };
 type NavGroup = { id: string; label: string; icon: string; children: NavLeaf[] };
@@ -97,10 +98,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Desktop sidebar */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-card md:flex">
         <div className="px-5 py-5">
-          <span className="inline-block rounded-lg bg-[#ffffff] p-1.5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-full.png" alt="HFOS: Household Financial OS" className="block h-auto w-40" />
-          </span>
+          <Link href="/dashboard" className="inline-flex text-ink" aria-label="HFOS home">
+            <Logo size={30} tagline />
+          </Link>
         </div>
         <nav aria-label="Primary" className="flex-1 space-y-1 overflow-y-auto px-3">
           {NAV.map((item) => {
@@ -182,10 +182,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Mobile header */}
         <header className="flex items-center justify-between border-b border-line bg-card px-4 py-3 md:hidden">
-          <span className="inline-block rounded-md bg-[#ffffff] p-1">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-full.png" alt="HFOS" className="block h-6 w-auto" />
-          </span>
+          <Link href="/dashboard" className="inline-flex text-ink" aria-label="HFOS home">
+            <Logo size={26} />
+          </Link>
           <div className="flex items-center gap-2">
             <ThemeControls />
             <button onClick={signOut} className="text-xs text-ink-muted underline">Sign out</button>
