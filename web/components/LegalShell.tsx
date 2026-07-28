@@ -8,7 +8,7 @@ export default function LegalShell({ title, updated, children }: { title: string
     <main className="min-h-screen bg-surface text-ink">
       <header className="mx-auto flex max-w-3xl items-center justify-between px-5 py-5">
         <Link href="/" className="inline-flex text-ink" aria-label="HFOS home">
-          <Logo size={28} />
+          <Logo size={36} />
         </Link>
         <Link href="/" className="text-sm font-medium text-ink-soft hover:text-ink">Back to home</Link>
       </header>

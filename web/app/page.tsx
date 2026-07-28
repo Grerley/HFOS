@@ -26,7 +26,7 @@ export default function MarketingHome() {
       <section className="brand-field text-white">
         <div className="mx-auto max-w-6xl px-5">
           <header className="flex items-center justify-between py-5">
-            <Logo size={40} variant="dark" />
+            <Logo size={48} variant="dark" />
             <nav className="flex items-center gap-2 text-sm font-medium">
               <Link href="/login" className="rounded-lg px-3 py-2 text-white/85 hover:bg-white/10 hover:text-white">Log in</Link>
               <Link href="/register" className="accent-gradient rounded-lg px-4 py-2 font-semibold text-white shadow-lift hover:opacity-95">Get started</Link>
@@ -110,7 +110,7 @@ export default function MarketingHome() {
       {/* Footer */}
       <footer className="border-t border-line-soft">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 py-8 sm:flex-row">
-          <Logo size={30} />
+          <Logo size={38} />
           <nav className="flex items-center gap-5 text-sm text-ink-muted">
             <Link href="/privacy" className="hover:text-ink">Privacy</Link>
             <Link href="/terms" className="hover:text-ink">Terms</Link>
