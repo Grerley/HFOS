@@ -137,9 +137,50 @@ body {
 /* Deep navy field used behind hero / marketing sections. */
 .brand-field {
   background:
-    radial-gradient(1100px 480px at 12% -10%, rgba(122,192,67,0.16), transparent 60%),
+    radial-gradient(1100px 480px at 12% -10%, rgba(122,192,67,0.18), transparent 60%),
+    radial-gradient(900px 520px at 100% 0%, rgba(64,120,196,0.28), transparent 62%),
     linear-gradient(160deg, var(--brand-dark), var(--brand) 55%, #24507f);
 }
+
+/* ── Marketing textures & glows (self-contained; no external assets) ────────── */
+/* Faint grid, masked so it fades out toward the edges. */
+.tex-grid {
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.06) 1px, transparent 1px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 0%, #000 35%, transparent 78%);
+  mask-image: radial-gradient(ellipse 75% 65% at 50% 0%, #000 35%, transparent 78%);
+}
+/* Soft dotted texture for light sections. */
+.tex-dots {
+  background-image: radial-gradient(currentColor 1px, transparent 1.4px);
+  background-size: 24px 24px;
+}
+/* Very subtle film grain via inline SVG noise (data URI = same-origin, CSP-safe). */
+.tex-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* Blurred colour blob for aurora glows. Position + size set inline. */
+.glow { position: absolute; border-radius: 9999px; filter: blur(72px); pointer-events: none; }
+/* Light-section aurora tint (theme-aware, very subtle). */
+.aurora {
+  background:
+    radial-gradient(680px 320px at 8% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
+    radial-gradient(720px 360px at 100% 20%, color-mix(in srgb, var(--brand) 10%, transparent), transparent 72%);
+}
+/* Premium card: gentle top-lit gradient + hover lift with a green glow. */
+.card-premium {
+  background-image: linear-gradient(180deg, color-mix(in srgb, var(--card) 100%, transparent), color-mix(in srgb, var(--muted) 55%, var(--card)));
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+.card-premium:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  box-shadow: 0 22px 48px -22px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+/* Thin gradient hairline divider. */
+.grad-rule { height: 1px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 55%, transparent), transparent); }
 
 /* Respect reduced-motion preference (§21, §23). */
 @media (prefers-reduced-motion: reduce) {
