@@ -33,7 +33,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex justify-center text-ink">
-          <Link href="/" aria-label="HFOS home"><Logo size={56} /></Link>
+          <Link href="/" aria-label="HFOS home"><Logo size={78} /></Link>
         </div>
         <form onSubmit={submit} className="space-y-4 rounded-2xl border border-line bg-card p-6 shadow-card">
           <Field label="Email">
