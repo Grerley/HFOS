@@ -99,7 +99,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-card md:flex">
         <div className="px-5 py-5">
           <Link href="/dashboard" className="inline-flex" aria-label="HFOS home">
-            <Logo size={54} />
+            <Logo size={74} />
           </Link>
         </div>
         <nav aria-label="Primary" className="flex-1 space-y-1 overflow-y-auto px-3">

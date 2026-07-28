@@ -42,7 +42,7 @@ export default function ResetPasswordPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <Logo size={56} />
+          <Logo size={78} />
         </div>
         <div className="rounded-xl border border-line bg-card p-6 shadow-sm">
           {done ? (
