@@ -1,0 +1,36 @@
+name: CI
+
+# Runs on every PR into develop or main: typecheck, tests, and a full OpenNext
+# build. This is the quality gate — merges should wait for it to pass green.
+# (On a private Free-plan repo GitHub can't hard-require it, so it is enforced
+# by process: PRs are merged only when this is green.)
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - "web/**"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Unit tests
+        run: npm test
+      - name: Build (OpenNext → Workers)
+        run: npx opennextjs-cloudflare build
