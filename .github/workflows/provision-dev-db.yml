@@ -1,0 +1,35 @@
+name: Provision dev D1
+
+# One-shot helper: creates the dev D1 database (hfos-db-dev) and prints its id
+# so it can be wired into wrangler.toml's [env.dev] binding. Safe to re-run:
+# if the database already exists, it just prints the existing id. Uses the same
+# CLOUDFLARE_API_TOKEN as the deploy workflow.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Create (or find) hfos-db-dev
+        run: |
+          echo "Attempting to create hfos-db-dev (ignored if it already exists)..."
+          npx wrangler d1 create hfos-db-dev || echo "create returned non-zero (likely already exists)"
+          echo "================ DEV DB DETAILS ================"
+          npx wrangler d1 info hfos-db-dev || npx wrangler d1 list
+          echo "==============================================="
