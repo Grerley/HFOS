@@ -46,10 +46,10 @@ HFOS_AI_GATEWAY_ID = "hfos"
 # both are present. TELEGRAM_BOT_USERNAME is a non-secret var used only to build
 # the t.me deep link shown in Settings → Connect Telegram. See docs/TELEGRAM_SETUP.md.
 TELEGRAM_BOT_USERNAME = "HomeFInanceOS_bot"
-# Transactional email sender. Resend's onboarding domain works out of the box but
-# only delivers to your own account email; replace with a verified domain address
-# (e.g. "HFOS <noreply@yourdomain.com>") once you've verified a domain in Resend.
-EMAIL_FROM = "HFOS <onboarding@resend.dev>"
+# Transactional email sender. hf-os.com is verified in Resend, so mail is sent
+# from the domain and delivers to any recipient (password resets, household
+# invites). RESEND_API_KEY is an encrypted secret synced from GitHub Actions.
+EMAIL_FROM = "HFOS <noreply@hf-os.com>"
 
 # ── Dev environment ───────────────────────────────────────────────────────────
 # `wrangler deploy --env dev` deploys the hfos-dev Worker (served at
