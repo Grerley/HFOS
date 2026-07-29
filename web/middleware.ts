@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 // Host-based routing so one Worker serves both sites:
-//   hfos.com / www.hfos.com  -> public marketing landing at "/"
-//   app.hfos.com             -> the product ("/" jumps straight to the app)
+//   hf-os.com / www.hf-os.com  -> public marketing landing at "/"
+//   app.hf-os.com              -> the product ("/" jumps straight to the app)
 export function middleware(req: NextRequest) {
   const host = (req.headers.get("host") || "").toLowerCase();
   const isAppHost = host.startsWith("app.");
