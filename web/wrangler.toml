@@ -50,3 +50,34 @@ TELEGRAM_BOT_USERNAME = "HomeFInanceOS_bot"
 # only delivers to your own account email; replace with a verified domain address
 # (e.g. "HFOS <noreply@yourdomain.com>") once you've verified a domain in Resend.
 EMAIL_FROM = "HFOS <onboarding@resend.dev>"
+
+# ── Dev environment ───────────────────────────────────────────────────────────
+# `wrangler deploy --env dev` deploys the hfos-dev Worker (served at
+# hfos-dev.<account>.workers.dev) against its own D1 (hfos-db-dev). Cloudflare
+# does NOT inherit bindings/vars into named environments, so they are repeated
+# here. Dev deliberately avoids paid/external services: copilot uses the free
+# native Workers AI, email is off (no RESEND key), and auth allows the insecure
+# signing key (HFOS_ALLOW_INSECURE_SECRET) since dev has no real users.
+[env.dev]
+name = "hfos-dev"
+
+[env.dev.assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "hfos-db-dev"
+database_id = "23b5aecd-343d-4c09-bff4-a723ed298ae1"
+migrations_dir = "migrations"
+
+[env.dev.ai]
+binding = "AI"
+
+[env.dev.vars]
+HFOS_COPILOT_PROVIDER = "workers-ai"
+HFOS_AI_GATEWAY_ID = "hfos"
+HFOS_ALLOW_INSECURE_SECRET = "1"
+# Dev Telegram bot username (set once the dev bot exists via BotFather).
+TELEGRAM_BOT_USERNAME = "HFOS_Dev_bot"
+EMAIL_FROM = "HFOS Dev <onboarding@resend.dev>"

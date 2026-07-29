@@ -1,6 +1,7 @@
-name: Deploy to Cloudflare Workers
+name: Deploy to Cloudflare (production)
 
-# Auto-deploys the HFOS app to Cloudflare on every push to main.
+# Deploys the production hfos Worker + hfos-db on every push to main (the
+# develop -> main promotion merge is the release gate).
 # Secrets are managed here (GitHub Actions), never by hand in the dashboard.
 #
 # Required GitHub repository secrets (Settings → Secrets and variables → Actions):
@@ -13,7 +14,7 @@ on:
     branches: [main]
     paths:
       - "web/**"
-      - ".github/workflows/deploy.yml"
+      - ".github/workflows/deploy-prod.yml"
   workflow_dispatch:
 
 concurrency:
