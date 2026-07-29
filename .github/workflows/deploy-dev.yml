@@ -54,3 +54,17 @@ jobs:
           put CRON_SECRET "$DEV_CRON_SECRET"
           put TELEGRAM_BOT_TOKEN "$DEV_TELEGRAM_BOT_TOKEN"
           put TELEGRAM_WEBHOOK_SECRET "$DEV_TELEGRAM_WEBHOOK_SECRET"
+      - name: Register dev Telegram webhook (if configured)
+        env:
+          DEV_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}
+          DEV_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.DEV_TELEGRAM_WEBHOOK_SECRET }}
+        run: |
+          if [ -n "$DEV_TELEGRAM_BOT_TOKEN" ] && [ -n "$DEV_TELEGRAM_WEBHOOK_SECRET" ]; then
+            echo "Registering the dev bot webhook..."
+            curl -sS "https://api.telegram.org/bot${DEV_TELEGRAM_BOT_TOKEN}/setWebhook" \
+              --data-urlencode "url=https://hfos-dev.geemutibura.workers.dev/api/telegram/webhook" \
+              --data-urlencode "secret_token=${DEV_TELEGRAM_WEBHOOK_SECRET}" \
+              | sed 's/^/  /'
+          else
+            echo "Dev Telegram not fully configured (need DEV_TELEGRAM_BOT_TOKEN + DEV_TELEGRAM_WEBHOOK_SECRET) — skipping webhook registration."
+          fi
