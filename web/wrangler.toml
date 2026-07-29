@@ -78,6 +78,6 @@ binding = "AI"
 HFOS_COPILOT_PROVIDER = "workers-ai"
 HFOS_AI_GATEWAY_ID = "hfos"
 HFOS_ALLOW_INSECURE_SECRET = "1"
-# Dev Telegram bot username (set once the dev bot exists via BotFather).
-TELEGRAM_BOT_USERNAME = "HFOS_Dev_bot"
+# Dev Telegram bot username (dev bot created via BotFather).
+TELEGRAM_BOT_USERNAME = "HomeFInanceOSDev_bot"
 EMAIL_FROM = "HFOS Dev <onboarding@resend.dev>"
