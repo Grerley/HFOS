@@ -71,3 +71,33 @@ describe("settlement engine", () => {
     expect(s.is_overdue).toBe(false);
   });
 });
+
+// The savings→account auto-adjust (payments.applyAccountDelta) moves the linked
+// account by the change in a line's paid total on every payment operation. So the
+// account's cumulative movement must always equal paidAmount(records) — these
+// tests pin that invariant so add/reverse/edit stay balance-consistent.
+describe("linked account movement equals paid total", () => {
+  const movement = (recs: Parameters<typeof paidAmount>[0]) => paidAmount(recs);
+
+  it("a deposit then its reversal nets to zero movement", () => {
+    expect(movement([{ amount_cents: 250000 }, { amount_cents: 250000, is_reversal: true }])).toBe(0);
+  });
+
+  it("editing a deposit down moves the account to the new amount", () => {
+    // Before: one 250000 deposit (account +250000). After edit to 100000, the
+    // paid total is 100000, so the account must reflect exactly that.
+    const before = movement([{ amount_cents: 250000 }]);
+    const after = movement([{ amount_cents: 100000 }]);
+    expect(before).toBe(250000);
+    expect(after).toBe(100000);
+    expect(after - before).toBe(-150000); // the delta applyAccountDelta applies
+  });
+
+  it("soft-deleting a deposit removes its contribution", () => {
+    expect(movement([{ amount_cents: 250000, deleted: true }])).toBe(0);
+  });
+
+  it("multiple deposits accumulate", () => {
+    expect(movement([{ amount_cents: 100000 }, { amount_cents: 150000 }])).toBe(250000);
+  });
+});

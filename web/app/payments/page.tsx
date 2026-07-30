@@ -10,7 +10,8 @@ import { formatMoney, formatPercent, toCents } from "@/lib/format";
 import type { Member, Period } from "@/lib/types";
 
 interface SettleLine {
-  line_id: number; item_name: string; category_name: string | null; section_name: string;
+  line_id: number; item_name: string; category_name: string | null; category_type: string | null; section_name: string;
+  destination_account_id: number | null;
   due_date: string | null; priority: number; payment_type?: string; is_debit_order: boolean; is_manual_payment: boolean;
   requires_confirmation: boolean; responsible_member_id: number | null; responsible_member_name: string | null;
   payment_count: number; comment_count: number;
@@ -370,7 +371,10 @@ function ExpandedRow({ line, history, members, accounts, onChanged, onAddPayment
   const [cfg, setCfg] = useState({
     due_date: line.due_date ?? "", responsible_member_id: line.responsible_member_id ?? "",
     payment_type: line.payment_type ?? "manual", manual_status: "",
+    destination_account_id: line.destination_account_id ? String(line.destination_account_id) : "",
   });
+  // Saving/investment lines can deposit a confirmed payment into an account.
+  const isSavingsLine = line.category_type === "saving" || line.category_type === "investment";
 
   async function reverse(id: number) {
     if (!confirm("Reverse this payment? The original stays in history.")) return;
@@ -382,6 +386,7 @@ function ExpandedRow({ line, history, members, accounts, onChanged, onAddPayment
       due_date: cfg.due_date || null,
       responsible_member_id: cfg.responsible_member_id ? Number(cfg.responsible_member_id) : null,
       payment_type: cfg.payment_type,
+      ...(isSavingsLine ? { destination_account_id: cfg.destination_account_id ? Number(cfg.destination_account_id) : null } : {}),
       ...(cfg.manual_status ? { manual_status: cfg.manual_status } : {}),
     });
     await onChanged();
@@ -441,6 +446,15 @@ function ExpandedRow({ line, history, members, accounts, onChanged, onAddPayment
               {PAYMENT_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </Select>
           </Field>
+          {isSavingsLine && (
+            <Field label="Deposits to">
+              <Select value={cfg.destination_account_id} onChange={(e) => setCfg({ ...cfg, destination_account_id: e.target.value })}>
+                <option value="">Not linked</option>
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </Select>
+              <span className="mt-1 block text-xs text-ink-muted">Confirming a payment adds it to this account&apos;s balance.</span>
+            </Field>
+          )}
           <Field label="Override status">
             <Select value={cfg.manual_status} onChange={(e) => setCfg({ ...cfg, manual_status: e.target.value })}>
               <option value="">Auto (derive)</option>

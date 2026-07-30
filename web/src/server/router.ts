@@ -462,6 +462,7 @@ route("DELETE", "/accounts/:id", async (req, params) => {
   const acc = await getScoped(ctx.db.select().from(accounts).where(eq(accounts.id, Number(params.id))), ctx.householdId, "Account");
   // Detach references so nothing is orphaned, then remove the account + its history.
   await ctx.db.update(budgetLines).set({ source_account_id: null }).where(and(eq(budgetLines.household_id, ctx.householdId), eq(budgetLines.source_account_id, acc.id)));
+  await ctx.db.update(budgetLines).set({ destination_account_id: null }).where(and(eq(budgetLines.household_id, ctx.householdId), eq(budgetLines.destination_account_id, acc.id)));
   await ctx.db.delete(accountBalances).where(eq(accountBalances.account_id, acc.id));
   await ctx.db.delete(accounts).where(eq(accounts.id, acc.id));
   await recordAudit(ctx.db, { action: "account.removed", entity_type: "account", entity_id: acc.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: { name: acc.name } });
@@ -554,6 +555,7 @@ route("POST", "/budget-periods/:id/lines", async (req, params) => {
     owner_member_id: p.owner_member_id ?? null, planned_amount_cents: p.planned_amount_cents ?? 0, actual_amount_cents: p.actual_amount_cents ?? 0,
     due_day: p.due_day ?? null, due_date: p.due_date ?? deriveDueDate(period, p.due_day),
     payment_status: p.payment_status ?? "planned", payment_type: p.payment_type ?? "manual", ...derivePaymentFlags(p.payment_type),
+    destination_account_id: p.destination_account_id ?? null,
     is_tithe: p.is_tithe ?? false, is_recurring: p.is_recurring ?? true, priority: p.priority ?? 3, notes: p.notes ?? null,
   }).returning();
   if (p.is_tithe) await recomputeTitheLines(ctx.db, ctx.householdId, period.id);
@@ -1043,7 +1045,7 @@ route("PATCH", "/budget-lines/:id/payment-config", async (req, params) => {
   const line = await getScoped(ctx.db.select().from(budgetLines).where(eq(budgetLines.id, Number(params.id))), ctx.householdId, "Line");
   const p = await body(req);
   const allowed: any = {};
-  for (const k of ["due_date", "responsible_member_id", "source_account_id", "is_debit_order", "is_manual_payment", "requires_confirmation", "manual_status", "priority"])
+  for (const k of ["due_date", "responsible_member_id", "source_account_id", "destination_account_id", "is_debit_order", "is_manual_payment", "requires_confirmation", "manual_status", "priority"])
     if (k in p) allowed[k] = p[k];
   // payment_type is the source of truth; derive the settlement booleans from it.
   if ("payment_type" in p) { allowed.payment_type = p.payment_type; Object.assign(allowed, derivePaymentFlags(p.payment_type)); }
