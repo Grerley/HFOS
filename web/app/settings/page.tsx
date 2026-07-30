@@ -9,9 +9,10 @@ import { formatMoney, toCents } from "@/lib/format";
 import { SETTINGS_TABS } from "@/lib/settingsTabs";
 import type { Category, Household, Member } from "@/lib/types";
 
-interface Account { id: number; name: string; type: string; current_balance_cents: number; }
+interface Account { id: number; name: string; type: string; current_balance_cents: number; balance_date?: string | null; }
 
 const CURRENCIES = ["ZAR", "USD", "EUR", "GBP", "AUD", "CAD", "NGN", "KES", "GHS", "INR", "AED", "JPY", "CHF", "CNY", "BWP", "NAD", "ZMW", "MZN"];
+const ACCOUNT_TYPES = ["bank", "cash", "investment", "loan", "credit_card", "bond", "savings_pocket"];
 const ROLES = ["owner", "partner", "admin", "advisor", "viewer", "child"];
 const CATEGORY_TYPES = ["income", "expense", "saving", "investment", "transfer"];
 
@@ -23,6 +24,7 @@ function SettingsInner() {
   const setTab = (id: string) => router.replace(`/settings?tab=${id}`, { scroll: false });
   const [members, setMembers] = useState<Member[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [balanceEditId, setBalanceEditId] = useState<number | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [household, setHousehold] = useState<Household | null>(null);
   const [hhForm, setHhForm] = useState({ name: "", base_currency: "ZAR", country: "", budget_cycle_day: 1 });
@@ -135,6 +137,26 @@ function SettingsInner() {
     if (!confirm(`Remove account "${a.name}"? Its balance history is deleted and any budget lines paying from it are detached.`)) return;
     try { await api.del(`/accounts/${a.id}`); await load(); }
     catch (err: any) { alert(err.message); }
+  }
+  async function renameAccount(a: Account, name: string) {
+    if (!name.trim() || name.trim() === a.name) return;
+    try { await api.patch(`/accounts/${a.id}`, { name: name.trim() }); await load(); }
+    catch (err: any) { alert(err.message); }
+  }
+  async function setAccountType(a: Account, type: string) {
+    if (type === a.type) return;
+    try { await api.patch(`/accounts/${a.id}`, { type }); await load(); }
+    catch (err: any) { alert(err.message); }
+  }
+  async function updateBalance(a: Account, e: React.FormEvent) {
+    e.preventDefault();
+    const f = new FormData(e.target as HTMLFormElement);
+    const as_of = (f.get("as_of") as string) || new Date().toISOString().slice(0, 10);
+    try {
+      await api.post(`/accounts/${a.id}/balances`, { as_of, balance_cents: toCents(f.get("balance") as string) });
+      setBalanceEditId(null);
+      await load();
+    } catch (err: any) { alert(err.message); }
   }
 
   async function renameCategory(c: Category, name: string) {
@@ -458,27 +480,80 @@ function SettingsInner() {
 
       {tab === "accounts" && (
       <div className="grid grid-cols-1 gap-6">
-        <Card title="Accounts">
+        <Card title="Accounts" subtitle={canWrite ? "Rename, retype and update balances as they change each month" : "Your household accounts"}>
           <div className="mb-4 space-y-2">
             {accounts.map((a) => (
-              <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted px-4 py-2">
-                <span className="min-w-0 truncate text-sm">{a.name} <span className="text-xs text-ink-muted">· {a.type}</span></span>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="tabular text-sm">{formatMoney(a.current_balance_cents, currency)}</span>
-                  <button onClick={() => removeAccount(a)} title="Remove account" className="rounded px-1.5 text-ink-muted hover:text-negative">✕</button>
+              <div key={a.id} className="rounded-lg bg-muted px-4 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  {canWrite ? (
+                    <input
+                      defaultValue={a.name}
+                      onBlur={(e) => renameAccount(a, e.target.value)}
+                      className="min-w-0 flex-1 truncate rounded bg-transparent text-sm outline-none focus:bg-surface focus:px-2 focus:py-1 focus:ring-1 focus:ring-brand/40"
+                      aria-label="Account name"
+                    />
+                  ) : (
+                    <span className="min-w-0 flex-1 truncate text-sm">{a.name}</span>
+                  )}
+                  <div className="flex shrink-0 items-center gap-2">
+                    {canWrite ? (
+                      <select
+                        value={a.type}
+                        onChange={(e) => setAccountType(a, e.target.value)}
+                        className="rounded bg-surface px-1.5 py-1 text-xs text-ink-muted outline-none focus:ring-1 focus:ring-brand/40"
+                        aria-label="Account type"
+                      >
+                        {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    ) : (
+                      <span className="text-xs text-ink-muted">{a.type}</span>
+                    )}
+                    <span className="tabular w-28 text-right text-sm font-medium">{formatMoney(a.current_balance_cents, currency)}</span>
+                    {canWrite && (
+                      <button
+                        onClick={() => setBalanceEditId(balanceEditId === a.id ? null : a.id)}
+                        title="Update balance"
+                        className="rounded px-2 py-0.5 text-xs font-medium text-brand-dark hover:bg-brand/10"
+                      >
+                        Update
+                      </button>
+                    )}
+                    {canWrite && (
+                      <button onClick={() => removeAccount(a)} title="Remove account" className="rounded px-1.5 text-ink-muted hover:text-negative">✕</button>
+                    )}
+                  </div>
                 </div>
+                {balanceEditId === a.id && (
+                  <form onSubmit={(e) => updateBalance(a, e)} className="mt-2 flex flex-wrap items-end gap-2 border-t border-line pt-2">
+                    <label className="text-xs text-ink-muted">
+                      New balance
+                      <Input name="balance" type="number" step="0.01" defaultValue={(a.current_balance_cents / 100).toFixed(2)} required className="mt-0.5 w-36" />
+                    </label>
+                    <label className="text-xs text-ink-muted">
+                      As of
+                      <Input name="as_of" type="date" defaultValue={new Date().toISOString().slice(0, 10)} className="mt-0.5" />
+                    </label>
+                    <Button type="submit" variant="ghost">Save balance</Button>
+                    <span className="text-xs text-ink-muted">Statement balance replaces the current figure and is kept in history.</span>
+                  </form>
+                )}
+                {balanceEditId !== a.id && a.balance_date && (
+                  <p className="mt-0.5 text-xs text-ink-muted">as of {a.balance_date}</p>
+                )}
               </div>
             ))}
             {!accounts.length && <p className="text-sm text-ink-muted">No accounts yet.</p>}
           </div>
-          <form onSubmit={addAccount} className="grid grid-cols-3 gap-2">
-            <Input name="name" placeholder="Account name" required />
-            <Select name="type" defaultValue="bank">
-              {["bank", "cash", "investment", "loan", "credit_card", "bond", "savings_pocket"].map((t) => <option key={t} value={t}>{t}</option>)}
-            </Select>
-            <Input name="balance" type="number" step="0.01" placeholder="Balance" defaultValue="0" />
-            <div className="col-span-3"><Button type="submit" variant="ghost">Add account</Button></div>
-          </form>
+          {canWrite && (
+            <form onSubmit={addAccount} className="grid grid-cols-3 gap-2">
+              <Input name="name" placeholder="Account name" required />
+              <Select name="type" defaultValue="bank">
+                {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </Select>
+              <Input name="balance" type="number" step="0.01" placeholder="Balance" defaultValue="0" />
+              <div className="col-span-3"><Button type="submit" variant="ghost">Add account</Button></div>
+            </form>
+          )}
         </Card>
       </div>
       )}

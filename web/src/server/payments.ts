@@ -2,7 +2,7 @@
  * and keeps each line's paid amount (actual_amount_cents) in sync with its records. */
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { DB } from "../db/client";
-import { budgetLines, categories, expenseComments, householdMembers, paymentRecords } from "../db/schema";
+import { accounts, budgetLines, categories, expenseComments, householdMembers, paymentRecords } from "../db/schema";
 import * as calc from "../lib/calc";
 import { OUTFLOW_TYPES } from "../lib/enums";
 import { HttpError } from "./context";
@@ -45,6 +45,37 @@ export async function getLineScoped(db: DB, householdId: number, lineId: number)
   const line = (await db.select().from(budgetLines).where(eq(budgetLines.id, lineId))).at(0);
   if (!line || line.household_id !== householdId) throw new HttpError(404, "Expense line not found");
   return line;
+}
+
+/**
+ * Keep a linked destination account in step with a saving/investment line's
+ * confirmed payments. The adjustment always equals the change in the line's paid
+ * total (delta), so a new payment credits the account, and a reversal, deletion
+ * or downward edit debits it — one rule covers every payment operation. Balances
+ * are absolute, so the household's monthly statement update trues up any drift.
+ * Missing/detached accounts are skipped silently (the field is best-effort).
+ */
+async function applyAccountDelta(
+  db: DB,
+  householdId: number,
+  actorUserId: number,
+  line: typeof budgetLines.$inferSelect,
+  deltaCents: number,
+  asOfDate?: string,
+) {
+  if (!line.destination_account_id || deltaCents === 0) return;
+  const acc = (await db.select().from(accounts).where(eq(accounts.id, line.destination_account_id))).at(0);
+  if (!acc || acc.household_id !== householdId) return;
+  const balanceAfter = acc.current_balance_cents + deltaCents;
+  const patch: { current_balance_cents: number; balance_date?: string } = { current_balance_cents: balanceAfter };
+  // Only advance the "as of" date on a deposit dated at/after the current one.
+  if (deltaCents > 0 && asOfDate && (!acc.balance_date || asOfDate >= acc.balance_date)) patch.balance_date = asOfDate;
+  await db.update(accounts).set(patch).where(eq(accounts.id, acc.id));
+  await recordAudit(db, {
+    action: "account.auto_adjusted", entity_type: "account", entity_id: acc.id,
+    household_id: householdId, actor_user_id: actorUserId,
+    detail: { line_id: line.id, delta_cents: deltaCents, balance_after: balanceAfter },
+  });
 }
 
 /** Full settlement view for a period: per-line settlement + household + category rollups. */
@@ -90,6 +121,8 @@ export async function periodSettlement(db: DB, householdId: number, periodId: nu
       item_name: l.item_name,
       category_id: l.category_id,
       category_name: catById.get(l.category_id)?.name ?? null,
+      category_type: catById.get(l.category_id)?.type ?? null,
+      destination_account_id: l.destination_account_id ?? null,
       section_id: sec?.id ?? null,
       section_name: sec?.name ?? "Other",
       due_date: l.due_date,
@@ -172,6 +205,7 @@ interface PaymentInput {
 export async function addPayment(db: DB, householdId: number, actorUserId: number, lineId: number, p: PaymentInput) {
   const line = await getLineScoped(db, householdId, lineId);
   if (p.amount_cents == null || p.amount_cents === 0) throw new HttpError(422, "Payment amount is required");
+  const paidBefore = line.actual_amount_cents;
   const [rec] = await db.insert(paymentRecords).values({
     budget_line_id: line.id, household_id: householdId,
     payment_date: p.payment_date ?? todayISO(), amount_cents: p.amount_cents,
@@ -180,6 +214,7 @@ export async function addPayment(db: DB, householdId: number, actorUserId: numbe
     reference: p.reference ?? null, notes: p.notes ?? null, created_by: actorUserId,
   }).returning();
   const paid = await recomputeLine(db, householdId, line.id);
+  await applyAccountDelta(db, householdId, actorUserId, line, paid - paidBefore, rec.payment_date);
   await recordAudit(db, {
     action: "payment.created", entity_type: "payment_record", entity_id: rec.id,
     household_id: householdId, actor_user_id: actorUserId,
@@ -191,9 +226,12 @@ export async function addPayment(db: DB, householdId: number, actorUserId: numbe
 export async function editPayment(db: DB, householdId: number, actorUserId: number, paymentId: number, patch: Partial<PaymentInput>) {
   const rec = (await db.select().from(paymentRecords).where(eq(paymentRecords.id, paymentId))).at(0);
   if (!rec || rec.household_id !== householdId) throw new HttpError(404, "Payment not found");
+  const line = await getLineScoped(db, householdId, rec.budget_line_id);
   const before = rec.amount_cents;
+  const paidBefore = line.actual_amount_cents;
   await db.update(paymentRecords).set({ ...patch, updated_at: new Date() as any }).where(eq(paymentRecords.id, paymentId));
   const paid = await recomputeLine(db, householdId, rec.budget_line_id);
+  await applyAccountDelta(db, householdId, actorUserId, line, paid - paidBefore, patch.payment_date ?? rec.payment_date);
   await recordAudit(db, {
     action: "payment.edited", entity_type: "payment_record", entity_id: paymentId,
     household_id: householdId, actor_user_id: actorUserId,
@@ -206,12 +244,15 @@ export async function reversePayment(db: DB, householdId: number, actorUserId: n
   const rec = (await db.select().from(paymentRecords).where(eq(paymentRecords.id, paymentId))).at(0);
   if (!rec || rec.household_id !== householdId) throw new HttpError(404, "Payment not found");
   if (rec.is_reversal) throw new HttpError(409, "Cannot reverse a reversal");
+  const line = await getLineScoped(db, householdId, rec.budget_line_id);
+  const paidBefore = line.actual_amount_cents;
   const [rev] = await db.insert(paymentRecords).values({
     budget_line_id: rec.budget_line_id, household_id: householdId, payment_date: todayISO(),
     amount_cents: rec.amount_cents, payment_method: "reversal", is_reversal: true,
     reversed_payment_record_id: rec.id, notes: reason ?? `Reversal of payment #${rec.id}`, created_by: actorUserId,
   }).returning();
   const paid = await recomputeLine(db, householdId, rec.budget_line_id);
+  await applyAccountDelta(db, householdId, actorUserId, line, paid - paidBefore);
   await recordAudit(db, {
     action: "payment.reversed", entity_type: "payment_record", entity_id: rec.id,
     household_id: householdId, actor_user_id: actorUserId,
@@ -223,8 +264,11 @@ export async function reversePayment(db: DB, householdId: number, actorUserId: n
 export async function softDeletePayment(db: DB, householdId: number, actorUserId: number, paymentId: number) {
   const rec = (await db.select().from(paymentRecords).where(eq(paymentRecords.id, paymentId))).at(0);
   if (!rec || rec.household_id !== householdId) throw new HttpError(404, "Payment not found");
+  const line = await getLineScoped(db, householdId, rec.budget_line_id);
+  const paidBefore = line.actual_amount_cents;
   await db.update(paymentRecords).set({ deleted_at: new Date() as any }).where(eq(paymentRecords.id, paymentId));
   const paid = await recomputeLine(db, householdId, rec.budget_line_id);
+  await applyAccountDelta(db, householdId, actorUserId, line, paid - paidBefore);
   await recordAudit(db, {
     action: "payment.deleted", entity_type: "payment_record", entity_id: paymentId,
     household_id: householdId, actor_user_id: actorUserId,

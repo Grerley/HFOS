@@ -171,6 +171,10 @@ export const budgetLines = sqliteTable("budget_lines", {
   due_date: text("due_date"), // ISO date the payment is due (drives overdue + calendar)
   responsible_member_id: integer("responsible_member_id"), // accountable person
   source_account_id: integer("source_account_id"), // expected paying account
+  // For saving/investment lines: the account a confirmed payment deposits into.
+  // When set, confirming/reversing/editing a payment auto-adjusts that account's
+  // balance by the change in this line's paid total (see payments.applyAccountDelta).
+  destination_account_id: integer("destination_account_id"),
   // Opt-in tithe: when true, planned_amount_cents is auto-derived as 10% of the
   // owner member's income for the period (recomputed on save).
   is_tithe: integer("is_tithe", { mode: "boolean" }).default(false).notNull(),
