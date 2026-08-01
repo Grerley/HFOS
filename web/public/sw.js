@@ -10,7 +10,7 @@
  *   · Non-GET /api/*: never handled here; the app-level write queue owns
  *     offline mutations (see lib/offline.ts).
  */
-const VERSION = "hfos-v2";
+const VERSION = "hfos-v3";
 const STATIC_CACHE = `${VERSION}-static`;
 const API_CACHE = `${VERSION}-api`;
 const SHELL_CACHE = `${VERSION}-shell`;
