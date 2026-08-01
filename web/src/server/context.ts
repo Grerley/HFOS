@@ -16,7 +16,14 @@ export class HttpError extends Error {
 export function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      // API data is dynamic and tenant-scoped, so the browser must never serve it
+      // stale from its HTTP cache — e.g. base_currency after a Settings change,
+      // which is read app-wide. The service worker keeps its own explicit offline
+      // copy (via cache.put, unaffected by this), so offline reads still work.
+      "cache-control": "no-store",
+    },
   });
 }
 
