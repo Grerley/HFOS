@@ -113,8 +113,14 @@ function SettingsInner() {
     try {
       const currencyChanged = hhForm.base_currency !== household.base_currency;
       await api.patch(`/households/${household.id}`, hhForm);
-      // Currency is read app-wide from the household; reload so it refreshes everywhere.
-      if (currencyChanged) { window.location.reload(); return; }
+      // Currency is read app-wide from the household. Drop any cached API responses
+      // (so /auth/me and per-page data refetch with the new currency), then reload
+      // so every page's symbol updates consistently, not just the dashboard.
+      if (currencyChanged) {
+        try { navigator.serviceWorker?.controller?.postMessage("hfos-clear-api-cache"); } catch { /* no SW */ }
+        window.location.reload();
+        return;
+      }
       await load();
     } catch (err: any) { alert(err.message); }
     finally { setHhBusy(false); }

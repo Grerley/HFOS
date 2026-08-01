@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Card, StatCard, Badge, EmptyState, PageSkeleton, Drawer, DrillRow, Skeleton, ErrorState } from "@/components/ui";
 import { CategoryBars, TrendChart } from "@/components/viz";
 import { api } from "@/lib/api";
+import { useCurrency } from "@/lib/currency";
 import { formatMoney, formatPercent } from "@/lib/format";
 import type { DashboardResponse, Insight } from "@/lib/types";
 
@@ -17,6 +18,9 @@ export default function DashboardPage() {
   const [error, setError] = useState(false);
   const [drill, setDrill] = useState<string | null>(null);
   const [detail, setDetail] = useState<{ lines: any[]; cats: any[]; accounts: any[] } | null>(null);
+  // Single app-wide currency source (household base currency via CurrencyContext),
+  // so the dashboard's symbol always matches every other page.
+  const currency = useCurrency();
 
   async function openDrill(metric: string) {
     setDrill(metric);
@@ -79,7 +83,6 @@ export default function DashboardPage() {
     );
   }
 
-  const currency = data.currency || "ZAR";
   const p = data.summary!.planned;
   const netTone = p.net_position_cents >= 0 ? "positive" : "negative";
   const sm = settle?.summary ?? null;
