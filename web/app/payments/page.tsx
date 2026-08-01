@@ -14,6 +14,7 @@ interface SettleLine {
   destination_account_id: number | null;
   due_date: string | null; priority: number; payment_type?: string; is_debit_order: boolean; is_manual_payment: boolean;
   requires_confirmation: boolean; responsible_member_id: number | null; responsible_member_name: string | null;
+  owner_member_id: number | null; owner_member_name: string | null;
   payment_count: number; comment_count: number;
   planned_cents: number; paid_cents: number; outstanding_cents: number; overpaid_cents: number;
   status: string; is_overdue: boolean;
@@ -77,6 +78,7 @@ export default function PaymentsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("All");
+  const [ownerFilter, setOwnerFilter] = useState<number | "all">("all");
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
   const [history, setHistory] = useState<PaymentRec[]>([]);
@@ -155,10 +157,11 @@ export default function PaymentsPage() {
         filter === "Manual" ? l.is_manual_payment :
         filter === "Needs Confirmation" ? l.is_debit_order && l.requires_confirmation && l.status !== "fully_paid" :
         true;
-      const byText = !q || [l.item_name, l.category_name, l.responsible_member_name].some((x) => (x ?? "").toLowerCase().includes(q));
-      return byFilter && byText;
+      const byOwner = ownerFilter === "all" || l.owner_member_id === ownerFilter;
+      const byText = !q || [l.item_name, l.category_name, l.responsible_member_name, l.owner_member_name].some((x) => (x ?? "").toLowerCase().includes(q));
+      return byFilter && byOwner && byText;
     });
-  }, [data, filter, search]);
+  }, [data, filter, ownerFilter, search]);
 
   if (loading) return <AppShell><PageSkeleton /></AppShell>;
   const s = data?.summary;
@@ -245,7 +248,18 @@ export default function PaymentsPage() {
                 {visible.filter((l) => l.outstanding_cents > 0).every((l) => selected.has(l.line_id)) ? "Deselect all" : "Select all outstanding"}
               </button>
             )}
-            <Input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} className="ml-auto max-w-[12rem]" />
+            {members.length > 0 && (
+              <Select
+                value={ownerFilter === "all" ? "" : String(ownerFilter)}
+                onChange={(e) => setOwnerFilter(e.target.value ? Number(e.target.value) : "all")}
+                className="ml-auto max-w-[11rem]"
+                aria-label="Filter by owner"
+              >
+                <option value="">All owners</option>
+                {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </Select>
+            )}
+            <Input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} className={`${members.length > 0 ? "" : "ml-auto "}max-w-[12rem]`} />
           </div>
 
           <div className="hidden md:block">
