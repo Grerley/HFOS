@@ -123,6 +123,8 @@ export async function periodSettlement(db: DB, householdId: number, periodId: nu
       category_name: catById.get(l.category_id)?.name ?? null,
       category_type: catById.get(l.category_id)?.type ?? null,
       destination_account_id: l.destination_account_id ?? null,
+      owner_member_id: l.owner_member_id ?? null,
+      owner_member_name: l.owner_member_id ? members.get(l.owner_member_id) ?? null : null,
       section_id: sec?.id ?? null,
       section_name: sec?.name ?? "Other",
       due_date: l.due_date,

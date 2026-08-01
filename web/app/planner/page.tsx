@@ -25,6 +25,7 @@ export default function PlannerPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeSection, setActiveSection] = useState<number | null>(null);
+  const [ownerFilter, setOwnerFilter] = useState<number | "all">("all");
   const [dragId, setDragId] = useState<number | null>(null);
   const [overId, setOverId] = useState<number | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -238,7 +239,11 @@ export default function PlannerPage() {
   const plannedFor = (sid: number | null) =>
     rows.filter((r) => sectionIdOf(r.category_id) === sid)
       .reduce((s, r) => s + (r.is_tithe ? tithePreview(r) : r.planned_amount_cents), 0);
-  const visibleRows = rows.filter((r) => sectionIdOf(r.category_id) === activeSection);
+  const visibleRows = rows.filter((r) =>
+    sectionIdOf(r.category_id) === activeSection &&
+    // Owner filter narrows the view; unsaved new rows stay visible so adding still works.
+    (ownerFilter === "all" || r.owner_member_id === ownerFilter || r._new),
+  );
   const activeName = tabs.find((t) => t.id === activeSection)?.name ?? "Section";
 
   return (
@@ -350,8 +355,8 @@ export default function PlannerPage() {
               </div>
             }
           >
-            {/* Section tabs */}
-            <div className="mb-4 flex flex-wrap gap-1 border-b border-line">
+            {/* Section tabs + owner filter */}
+            <div className="mb-4 flex flex-wrap items-end gap-1 border-b border-line">
               {tabs.map((t) => {
                 const active = t.id === activeSection;
                 return (
@@ -372,6 +377,19 @@ export default function PlannerPage() {
                   </button>
                 );
               })}
+              {members.length > 0 && (
+                <div className="mb-1 ml-auto">
+                  <Select
+                    value={ownerFilter === "all" ? "" : String(ownerFilter)}
+                    onChange={(e) => setOwnerFilter(e.target.value ? Number(e.target.value) : "all")}
+                    className="max-w-[11rem] text-xs"
+                    aria-label="Filter by owner"
+                  >
+                    <option value="">All owners</option>
+                    {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </Select>
+                </div>
+              )}
             </div>
 
             <div className="overflow-x-auto">
