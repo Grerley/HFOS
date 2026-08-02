@@ -18,8 +18,8 @@ export default function DashboardPage() {
   const [error, setError] = useState(false);
   const [drill, setDrill] = useState<string | null>(null);
   const [detail, setDetail] = useState<{ lines: any[]; cats: any[]; accounts: any[] } | null>(null);
-  // Single app-wide currency source (household base currency via CurrencyContext),
-  // so the dashboard's symbol always matches every other page.
+  // Single app-wide currency source (the household's base currency), so the
+  // dashboard's symbol always matches every other page.
   const currency = useCurrency();
 
   async function openDrill(metric: string) {

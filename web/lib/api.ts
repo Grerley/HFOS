@@ -145,7 +145,7 @@ export const AUTH = {
   },
   me() {
     // Never serve a stale identity/household from the HTTP cache: base_currency
-    // (read app-wide via CurrencyContext) must reflect the latest Settings change.
+    // (read app-wide via useCurrency) must reflect the latest Settings change.
     return request<import("./types").AuthResponse>("/auth/me", { cache: "no-store" });
   },
   forgotPassword(email: string) {
