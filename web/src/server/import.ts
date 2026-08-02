@@ -52,14 +52,17 @@ export function classifySheet(name: string, ws: WS): [string, number] {
   return ["other", 0.3];
 }
 
-export function parseMonthDates(label: string): [string, string] | null {
+// defaultYear is the budget year the user assigns for the upload; it's used only
+// when a sheet's label doesn't already carry an explicit year (an explicit year
+// in the label always wins, so mixed-year workbooks stay correct).
+export function parseMonthDates(label: string, defaultYear = 2025): [string, string] | null {
   const m = label.toLowerCase().match(/^([a-z]{3})4([a-z]{3})/);
   if (!m) return null;
   const sm = MONTHS[m[1]];
   const em = MONTHS[m[2]];
   if (!sm || !em) return null;
   const yr = label.match(/20\d{2}|\b\d{2}\b/);
-  let year = 2025;
+  let year = defaultYear;
   if (yr) {
     const y = parseInt(yr[0], 10);
     year = y > 100 ? y : 2000 + y;
@@ -148,7 +151,7 @@ export function parseMonthlySheet(ws: WS) {
   return { owners: owners.map((o) => o[1]), sections, reconciliation };
 }
 
-export function analyzeWorkbook(bytes: ArrayBuffer) {
+export function analyzeWorkbook(bytes: ArrayBuffer, defaultYear = 2025) {
   const wb = XLSX.read(bytes, { type: "array" });
   const sheets: any[] = [];
   const owners = new Set<string>();
@@ -161,7 +164,7 @@ export function analyzeWorkbook(bytes: ArrayBuffer) {
       parsed.owners.forEach((o) => owners.add(o));
       entry.owners = parsed.owners;
       entry.line_count = parsed.sections.reduce((s, sec) => s + sec.lines.length, 0);
-      const d = parseMonthDates(name);
+      const d = parseMonthDates(name, defaultYear);
       entry.dates = d ? { start: d[0], end: d[1] } : null;
     }
     sheets.push(entry);
@@ -174,6 +177,7 @@ export async function importWorkbook(
   householdId: number,
   bytes: ArrayBuffer,
   actorUserId: number,
+  defaultYear = 2025,
 ) {
   const wb = XLSX.read(bytes, { type: "array" });
 
@@ -220,7 +224,7 @@ export async function importWorkbook(
       report.sheets.push({ sheet: name, kind, status: "not_imported" });
       continue;
     }
-    const dates = parseMonthDates(name);
+    const dates = parseMonthDates(name, defaultYear);
     if (!dates) {
       report.review_queue.push({ sheet: name, reason: "could_not_map_dates", action: "confirm period dates" });
       report.sheets.push({ sheet: name, kind, status: "needs_date_mapping" });

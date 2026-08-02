@@ -10,6 +10,7 @@ export default function ImportPage() {
   const [analysis, setAnalysis] = useState<any | null>(null);
   const [report, setReport] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
+  const [year, setYear] = useState<number>(new Date().getFullYear());
 
   async function analyze() {
     if (!file) return;
@@ -17,6 +18,7 @@ export default function ImportPage() {
     try {
       const form = new FormData();
       form.append("file", file);
+      form.append("year", String(year));
       setAnalysis(await api.upload<any>("/import/workbook/analyze", form));
       setReport(null);
     } catch (e: any) {
@@ -32,6 +34,7 @@ export default function ImportPage() {
     try {
       const form = new FormData();
       form.append("file", file);
+      form.append("year", String(year));
       setReport(await api.upload<any>("/import/workbook", form));
     } catch (e: any) {
       alert(e.message);
@@ -54,6 +57,18 @@ export default function ImportPage() {
           onChange={(e) => { setFile(e.target.files?.[0] ?? null); setAnalysis(null); setReport(null); }}
           className="block text-sm"
         />
+        <label className="mt-4 block text-sm">
+          <span className="mb-1 block text-xs font-medium text-ink-soft">Budget year</span>
+          <input
+            type="number"
+            min={2000}
+            max={2100}
+            value={year}
+            onChange={(e) => { setYear(Number(e.target.value) || new Date().getFullYear()); setAnalysis(null); setReport(null); }}
+            className="w-32 rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+          />
+          <span className="ml-2 text-xs text-ink-muted">Applied to sheets whose name has no year (e.g. “Jan–Feb”). A year in the sheet name is kept as-is.</span>
+        </label>
         <div className="mt-4 flex gap-2">
           <Button variant="ghost" onClick={analyze} disabled={!file || busy}>Analyze</Button>
           <Button onClick={runImport} disabled={!file || busy}>{busy ? "Working…" : "Import"}</Button>
