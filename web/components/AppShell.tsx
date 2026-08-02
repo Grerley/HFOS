@@ -6,7 +6,7 @@ import { AUTH, getHouseholdId, getToken, logout, setHouseholdId } from "@/lib/ap
 import type { Household } from "@/lib/types";
 import { ThemeControls } from "@/components/theme";
 import OfflineBanner from "@/components/OfflineBanner";
-import { CurrencyContext } from "@/lib/currency";
+import { setCurrency } from "@/lib/currency";
 import { SETTINGS_TABS } from "@/lib/settingsTabs";
 import Logo from "@/components/Logo";
 
@@ -74,6 +74,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       .catch(() => { logout(); router.replace("/login"); });
   }, [router]);
 
+  // Publish the active household's currency to the module store so useCurrency()
+  // works in every component, including the pages that render <AppShell>.
+  useEffect(() => {
+    const active = households.find((h) => h.id === activeHh) ?? households[0];
+    setCurrency(active?.base_currency);
+  }, [households, activeHh]);
+
   function signOut() { logout(); router.replace("/login"); }
   function switchHousehold(id: number) {
     setActiveHh(id);
@@ -89,10 +96,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const active = households.find((h) => h.id === activeHh) ?? households[0];
-  const currency = active?.base_currency || "ZAR";
 
   return (
-    <CurrencyContext.Provider value={currency}>
     <div className="flex min-h-screen bg-surface text-ink">
       <a href="#main" className="skip-link">Skip to content</a>
       {/* Desktop sidebar */}
@@ -214,7 +219,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         })}
       </nav>
     </div>
-    </CurrencyContext.Provider>
   );
 }
 
