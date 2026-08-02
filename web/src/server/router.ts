@@ -14,6 +14,7 @@ import {
   householdMembers,
   insights,
   memberships,
+  paymentRecords,
   properties,
   propertyCashFlows,
   scenarios,
@@ -540,6 +541,33 @@ route("PATCH", "/budget-periods/:id/status", async (req, params) => {
   await recordAudit(ctx.db, { action: "budget_period.status", entity_type: "budget_period", entity_id: period.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: { from: period.status, to: p.status } });
   return json((await ctx.db.select().from(budgetPeriods).where(eq(budgetPeriods.id, period.id))).at(0));
 });
+route("DELETE", "/budget-periods/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const period = await getScoped(ctx.db.select().from(budgetPeriods).where(eq(budgetPeriods.id, Number(params.id))), ctx.householdId, "Budget period");
+  const p = await body(req);
+  // Guard against accidental deletion: the caller must echo the exact label.
+  if (!p || typeof p.confirm !== "string" || p.confirm.trim() !== period.label) {
+    throw new HttpError(422, "To delete this budget, confirm with its exact label.");
+  }
+  // Cascade: payment records, allocations and comments for this period's lines,
+  // then the lines; period-scoped insights; and detach anything that merely
+  // references the period (scenarios' base period, property cash-flow rows).
+  const lineRows = await ctx.db.select({ id: budgetLines.id }).from(budgetLines)
+    .where(and(eq(budgetLines.period_id, period.id), eq(budgetLines.household_id, ctx.householdId)));
+  const lineIds = lineRows.map((l) => l.id);
+  if (lineIds.length) {
+    await ctx.db.delete(paymentRecords).where(inArray(paymentRecords.budget_line_id, lineIds));
+    await ctx.db.delete(budgetLineAllocations).where(inArray(budgetLineAllocations.line_id, lineIds));
+    await ctx.db.delete(expenseComments).where(inArray(expenseComments.budget_line_id, lineIds));
+    await ctx.db.delete(budgetLines).where(inArray(budgetLines.id, lineIds));
+  }
+  await ctx.db.delete(insights).where(and(eq(insights.household_id, ctx.householdId), eq(insights.period_id, period.id)));
+  await ctx.db.update(scenarios).set({ base_period_id: null }).where(and(eq(scenarios.household_id, ctx.householdId), eq(scenarios.base_period_id, period.id)));
+  await ctx.db.update(propertyCashFlows).set({ period_id: null }).where(eq(propertyCashFlows.period_id, period.id));
+  await ctx.db.delete(budgetPeriods).where(eq(budgetPeriods.id, period.id));
+  await recordAudit(ctx.db, { action: "budget_period.deleted", entity_type: "budget_period", entity_id: period.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: { label: period.label, lines_deleted: lineIds.length } });
+  return new Response(null, { status: 204 });
+});
 route("GET", "/budget-periods/:id/lines", async (req, params) => {
   const ctx = await requireAuth(req);
   await getScoped(ctx.db.select().from(budgetPeriods).where(eq(budgetPeriods.id, Number(params.id))), ctx.householdId, "Budget period");
@@ -981,17 +1009,23 @@ route("DELETE", "/telegram/link", async (req) => {
 });
 
 // ── Import ────────────────────────────────────────────────────────────────────
+// Budget year assigned to an Excel upload; used for sheets whose label has no
+// explicit year. Falls back to 2025 when absent or out of range.
+function importYear(form: FormData): number {
+  const raw = Number(form.get("year"));
+  return Number.isFinite(raw) && raw >= 1900 && raw <= 3000 ? Math.trunc(raw) : 2025;
+}
 route("POST", "/import/workbook/analyze", async (req) => {
   const ctx = await requireAuth(req); requireWrite(ctx);
   const form = await req.formData();
   const file = form.get("file") as File;
-  return json(analyzeWorkbook(await file.arrayBuffer()));
+  return json(analyzeWorkbook(await file.arrayBuffer(), importYear(form)));
 });
 route("POST", "/import/workbook", async (req) => {
   const ctx = await requireAuth(req); requireWrite(ctx);
   const form = await req.formData();
   const file = form.get("file") as File;
-  return json(await importWorkbook(ctx.db, ctx.householdId, await file.arrayBuffer(), ctx.userId));
+  return json(await importWorkbook(ctx.db, ctx.householdId, await file.arrayBuffer(), ctx.userId, importYear(form)));
 });
 
 // ── Payment tracking / settlement ─────────────────────────────────────────────

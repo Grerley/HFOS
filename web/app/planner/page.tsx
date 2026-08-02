@@ -26,6 +26,9 @@ export default function PlannerPage() {
   const [saving, setSaving] = useState(false);
   const [activeSection, setActiveSection] = useState<number | null>(null);
   const [ownerFilter, setOwnerFilter] = useState<number | "all">("all");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [dragId, setDragId] = useState<number | null>(null);
   const [overId, setOverId] = useState<number | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -224,6 +227,29 @@ export default function PlannerPage() {
     alert("Insights generated. See the Dashboard.");
   }
 
+  async function deletePeriod() {
+    if (!period || deleteConfirm.trim() !== period.label) return;
+    setDeleteBusy(true);
+    try {
+      await api.del(`/budget-periods/${period.id}`, { confirm: deleteConfirm.trim() });
+      setDeleteOpen(false);
+      setDeleteConfirm("");
+      const ps = await api.get<Period[]>("/budget-periods");
+      setPeriods(ps);
+      if (ps.length) {
+        await selectPeriod(ps[0].id);
+      } else {
+        setPeriodId(null);
+        setRows([]);
+        setSummary(null);
+      }
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
   if (loading && !periods.length) return <AppShell><PageSkeleton /></AppShell>;
 
   const catName = (id: number) => catMap.get(id)?.name || "–";
@@ -297,6 +323,40 @@ export default function PlannerPage() {
         </div>
       </Modal>
 
+      <Modal
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        title="Delete budget"
+        subtitle={period ? `This permanently removes “${period.label}” and everything in it` : undefined}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)} disabled={deleteBusy}>Cancel</Button>
+            <button
+              onClick={deletePeriod}
+              disabled={deleteBusy || !period || deleteConfirm.trim() !== period?.label}
+              className="rounded-lg bg-negative px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 hover:opacity-90"
+            >
+              {deleteBusy ? "Deleting…" : "Delete permanently"}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-ink-soft">
+            Deleting a budget removes its lines, payments and settlement history. This cannot be undone.
+            To confirm, type the budget&apos;s exact name below.
+          </p>
+          <Field label={`Type “${period?.label ?? ""}” to confirm`}>
+            <Input
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder={period?.label ?? ""}
+              autoFocus
+            />
+          </Field>
+        </div>
+      </Modal>
+
       <NewMonthWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
@@ -326,6 +386,14 @@ export default function PlannerPage() {
               </Select>
             )}
             <Button variant="ghost" onClick={generateInsights}>Generate insights</Button>
+            {period && (
+              <button
+                onClick={() => { setDeleteConfirm(""); setDeleteOpen(true); }}
+                className="ml-auto rounded-lg border border-negative/40 px-3 py-1.5 text-xs font-medium text-negative hover:bg-negative/10"
+              >
+                Delete budget
+              </button>
+            )}
           </div>
 
           {summary && (
