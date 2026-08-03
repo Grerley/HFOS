@@ -49,12 +49,17 @@ export function StatCard({
     ? "cursor-pointer text-left transition hover:border-brand hover:shadow-card focus:outline-none focus:ring-2 focus:ring-brand"
     : "";
   const Tag: any = onClick ? "button" : "div";
+  // Auto-fit the headline: long money strings (e.g. "R 1 234 567,89") would
+  // overflow a narrow card at text-2xl, so step the size down by length. The
+  // value stays on one line (no ugly mid-number wraps).
+  const glyphs = String(value).replace(/\s/g, "").length;
+  const sizeClass = glyphs > 13 ? "text-lg" : glyphs > 9 ? "text-xl" : "text-2xl";
   return (
-    <Tag onClick={onClick} className={`w-full rounded-xl border border-line bg-card p-5 shadow-sm ${interactive}`}>
+    <Tag onClick={onClick} className={`w-full min-w-0 rounded-xl border border-line bg-card p-5 shadow-sm ${interactive}`}>
       <p className="flex items-center justify-between text-xs font-medium uppercase tracking-wide text-ink-muted">
         {label}{onClick && <span aria-hidden className="text-ink-muted">›</span>}
       </p>
-      <p className={`tabular mt-2 text-2xl font-semibold ${toneClass}`}>{value}</p>
+      <p className={`tabular mt-2 whitespace-nowrap leading-tight font-semibold ${sizeClass} ${toneClass}`}>{value}</p>
       {hint && <p className="mt-1 text-xs text-ink-muted">{hint}</p>}
     </Tag>
   );

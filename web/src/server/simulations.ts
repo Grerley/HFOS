@@ -171,11 +171,13 @@ function runAsset(a: Record<string, unknown>): RunResult {
   const baseInput: sim.AmortInput = { principal_cents: financed, annual_rate: rate, months, balloon_cents: balloon, monthly_fee_cents: monthlyFee };
   const base = sim.amortise(baseInput);
 
-  // Optimised strategy
+  // Optimised strategy. A 0/blank optimise field means "keep the base value"
+  // (the deposit / term / rate above), not literally zero — otherwise the
+  // optimised loan would collapse to a 1-month term and report nonsense savings.
   const extraMonthly = num(a.extra_monthly_cents);
-  const optDeposit = num(a.optimised_deposit_cents, deposit);
-  const optTerm = num(a.optimised_months, months);
-  const optRate = num(a.optimised_annual_rate, rate);
+  const optDeposit = num(a.optimised_deposit_cents) > 0 ? num(a.optimised_deposit_cents) : deposit;
+  const optTerm = num(a.optimised_months) > 0 ? num(a.optimised_months) : months;
+  const optRate = num(a.optimised_annual_rate) > 0 ? num(a.optimised_annual_rate) : rate;
   const optFinanced = sim.financedAmount(price, optDeposit, financedCosts);
   const optInput: sim.AmortInput = {
     principal_cents: optFinanced, annual_rate: optRate, months: optTerm,
