@@ -326,6 +326,45 @@ export const scenarios = sqliteTable("scenarios", {
   updated_at: tsu(),
 });
 
+// ── Simulations module ────────────────────────────────────────────────────────
+// A Simulation is a decision workspace (Investment & Savings, Tax, or Asset
+// acquisition). It owns one or more Scenarios (base / conservative / optimistic /
+// custom). Assumptions and results are versioned JSON; scenarios are isolated
+// from the live budget until explicitly implemented (BR-008).
+export const simulations = sqliteTable("simulations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  household_id: integer("household_id").notNull(),
+  simulation_type: text("simulation_type").notNull(), // 'investment' | 'tax' | 'asset'
+  name: text("name").notNull(),
+  description: text("description"),
+  owner_member_id: integer("owner_member_id"),
+  currency: text("currency").default("ZAR").notNull(),
+  start_date: text("start_date"),
+  end_date: text("end_date"),
+  status: text("status").default("draft").notNull(), // draft | active | approved | archived
+  version: integer("version").default(1).notNull(),
+  created_by_id: integer("created_by_id"),
+  created_at: ts(),
+  updated_at: tsu(),
+});
+
+export const simulationScenarios = sqliteTable("simulation_scenarios", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  simulation_id: integer("simulation_id").notNull(),
+  household_id: integer("household_id").notNull(), // denormalised for tenant scoping
+  scenario_name: text("scenario_name").notNull(),
+  scenario_type: text("scenario_type").default("custom").notNull(), // base | conservative | optimistic | custom
+  assumptions_json: text("assumptions_json", { mode: "json" }).$type<Record<string, unknown>>().default({}),
+  result_summary_json: text("result_summary_json", { mode: "json" }).$type<Record<string, unknown>>().default({}),
+  risk_rating: text("risk_rating"), // low | medium | high | null
+  recommendation_status: text("recommendation_status"), // recommended | alternative | rejected | null
+  model_version: text("model_version"),
+  version: integer("version").default(1).notNull(),
+  calculated_at: integer("calculated_at", { mode: "timestamp" }),
+  created_at: ts(),
+  updated_at: tsu(),
+});
+
 export const insights = sqliteTable("insights", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   household_id: integer("household_id").notNull(),

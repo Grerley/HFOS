@@ -18,10 +18,13 @@ import {
   properties,
   propertyCashFlows,
   scenarios,
+  simulations,
+  simulationScenarios,
   transactions,
   users,
 } from "../db/schema";
 import * as calc from "../lib/calc";
+import * as simlib from "../lib/simulate";
 import { createAccessToken } from "../lib/auth";
 import { hashPassword, verifyPassword } from "../lib/hash";
 import { validatePassword } from "../lib/password";
@@ -50,6 +53,7 @@ import {
 } from "./context";
 import { applyBatch, backfillDueDates, deriveDueDate, duplicatePeriod, loadLinesForCalc, provisionHousehold, recomputeTitheLines, recordAudit, removeMember } from "./services";
 import { generatePeriodInsights, runScenarioAny, scenarioStartState } from "./insights";
+import { householdImpact, runSimulation, SIMULATION_TYPES } from "./simulations";
 import { analyzeWorkbook, importWorkbook } from "./import";
 import {
   addPayment,
@@ -822,6 +826,179 @@ route("GET", "/scenarios/:id/compare", async (req, params) => {
   const ctx = await requireAuth(req);
   const s = await getScoped(ctx.db.select().from(scenarios).where(eq(scenarios.id, Number(params.id))), ctx.householdId, "Scenario");
   return json(s.projected_results_json ?? (await runScenarioAny(ctx.db, ctx.householdId, s.base_period_id ?? null, (s.assumptions_json ?? {}) as any)));
+});
+
+// ── Simulations module (Investment & Savings / Tax / Asset acquisition) ───────
+// Reference data: versioned tax tables and central risk-profile assumptions.
+route("GET", "/simulations/reference", async (req) => {
+  await requireAuth(req);
+  const tax_years = Object.values(simlib.TAX_TABLES).map((t) => ({
+    year: t.year, version: t.version,
+    rebate_primary_cents: t.rebate_primary_cents,
+    ra_deduction_pct: t.ra_deduction_pct, ra_deduction_cap_cents: t.ra_deduction_cap_cents,
+    medical_main_cents: t.medical_main_cents, medical_first_cents: t.medical_first_cents, medical_additional_cents: t.medical_additional_cents,
+    tfsa_annual_cap_cents: t.tfsa_annual_cap_cents,
+    brackets: t.brackets,
+  }));
+  return json({ types: SIMULATION_TYPES, tax_years, risk_profiles: simlib.RISK_PROFILES, model_version: simlib.SIMULATE_VERSION });
+});
+
+// Stateless calculators: power live recalculation without saving anything.
+route("POST", "/simulations/calc/:type", async (req, params) => {
+  await requireAuth(req);
+  const p = await body(req);
+  try {
+    return json(runSimulation(params.type, (p.assumptions ?? p) as Record<string, unknown>));
+  } catch (e) {
+    throw new HttpError(422, e instanceof Error ? e.message : "Invalid simulation input");
+  }
+});
+
+// Integrated household impact of a proposed monthly change (§6, AC-008).
+route("POST", "/simulations/household-impact", async (req) => {
+  const ctx = await requireAuth(req);
+  const p = await body(req);
+  return json(await householdImpact(ctx.db, ctx.householdId, {
+    monthly_expense_delta_cents: Number(p.monthly_expense_delta_cents ?? 0),
+    monthly_contribution_delta_cents: Number(p.monthly_contribution_delta_cents ?? 0),
+    one_off_cash_cents: Number(p.one_off_cash_cents ?? 0),
+    new_debt_cents: Number(p.new_debt_cents ?? 0),
+  }));
+});
+
+// CRUD: a Simulation owns Scenarios. Both are tenant-scoped and audited.
+route("GET", "/simulations", async (req) => {
+  const ctx = await requireAuth(req);
+  const type = qp(req, "type");
+  const rows = await ctx.db.select().from(simulations).where(eq(simulations.household_id, ctx.householdId)).orderBy(desc(simulations.updated_at));
+  const filtered = type ? rows.filter((r) => r.simulation_type === type) : rows;
+  // Attach scenario counts + the latest result headline for landing cards.
+  const out = [] as any[];
+  for (const s of filtered) {
+    const scen = await ctx.db.select().from(simulationScenarios).where(eq(simulationScenarios.simulation_id, s.id)).orderBy(desc(simulationScenarios.updated_at));
+    out.push({ ...s, scenario_count: scen.length, latest_summary: scen[0]?.result_summary_json ?? null, latest_updated: scen[0]?.updated_at ?? s.updated_at });
+  }
+  return json(out);
+});
+route("POST", "/simulations", async (req) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const p = await body(req);
+  if (!SIMULATION_TYPES.includes(p.simulation_type)) throw new HttpError(422, "simulation_type must be investment, tax or asset");
+  const hh = (await ctx.db.select().from(households).where(eq(households.id, ctx.householdId))).at(0);
+  const [s] = await ctx.db.insert(simulations).values({
+    household_id: ctx.householdId, simulation_type: p.simulation_type, name: p.name || "Untitled simulation",
+    description: p.description ?? null, owner_member_id: p.owner_member_id ?? null,
+    currency: p.currency || hh?.base_currency || "ZAR",
+    start_date: p.start_date ?? null, end_date: p.end_date ?? null, status: p.status ?? "draft", created_by_id: ctx.userId,
+  }).returning();
+  await recordAudit(ctx.db, { action: "simulation.created", entity_type: "simulation", entity_id: s.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: { type: s.simulation_type, name: s.name } });
+  return json({ ...s, scenarios: [] }, 201);
+});
+route("GET", "/simulations/:id", async (req, params) => {
+  const ctx = await requireAuth(req);
+  const s = await getScoped(ctx.db.select().from(simulations).where(eq(simulations.id, Number(params.id))), ctx.householdId, "Simulation");
+  const scenarioRows = await ctx.db.select().from(simulationScenarios).where(eq(simulationScenarios.simulation_id, s.id)).orderBy(simulationScenarios.id);
+  return json({ ...s, scenarios: scenarioRows });
+});
+route("PATCH", "/simulations/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const s = await getScoped(ctx.db.select().from(simulations).where(eq(simulations.id, Number(params.id))), ctx.householdId, "Simulation");
+  const p = await body(req);
+  const allowed: any = {};
+  for (const k of ["name", "description", "owner_member_id", "currency", "start_date", "end_date", "status"]) if (k in p) allowed[k] = p[k];
+  await ctx.db.update(simulations).set(allowed).where(eq(simulations.id, s.id));
+  await recordAudit(ctx.db, { action: "simulation.updated", entity_type: "simulation", entity_id: s.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: allowed });
+  return json((await ctx.db.select().from(simulations).where(eq(simulations.id, s.id))).at(0));
+});
+route("DELETE", "/simulations/:id", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const s = await getScoped(ctx.db.select().from(simulations).where(eq(simulations.id, Number(params.id))), ctx.householdId, "Simulation");
+  await ctx.db.delete(simulationScenarios).where(eq(simulationScenarios.simulation_id, s.id));
+  await ctx.db.delete(simulations).where(eq(simulations.id, s.id));
+  await recordAudit(ctx.db, { action: "simulation.deleted", entity_type: "simulation", entity_id: s.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: { name: s.name } });
+  return new Response(null, { status: 204 });
+});
+
+// Scenarios: creating/updating recomputes the result summary server-side and
+// keeps a version (BR-009 — a new calc, prior results not silently lost).
+async function saveScenario(ctx: Ctx, sim: typeof simulations.$inferSelect, sid: number | null, p: any) {
+  const assumptions = (p.assumptions ?? {}) as Record<string, unknown>;
+  const run = runSimulation(sim.simulation_type, assumptions);
+  const now = new Date();
+  if (sid == null) {
+    const [row] = await ctx.db.insert(simulationScenarios).values({
+      simulation_id: sim.id, household_id: ctx.householdId,
+      scenario_name: p.scenario_name || "Base case", scenario_type: p.scenario_type || "base",
+      assumptions_json: assumptions, result_summary_json: run.summary as any,
+      risk_rating: run.risk_rating, recommendation_status: p.recommendation_status ?? null,
+      model_version: run.model_version, calculated_at: now,
+    }).returning();
+    return row;
+  }
+  const existing = (await ctx.db.select().from(simulationScenarios).where(eq(simulationScenarios.id, sid))).at(0)!;
+  await ctx.db.update(simulationScenarios).set({
+    scenario_name: p.scenario_name ?? existing.scenario_name,
+    scenario_type: p.scenario_type ?? existing.scenario_type,
+    assumptions_json: assumptions, result_summary_json: run.summary as any,
+    risk_rating: run.risk_rating, recommendation_status: p.recommendation_status ?? existing.recommendation_status,
+    model_version: run.model_version, calculated_at: now, version: existing.version + 1,
+  }).where(eq(simulationScenarios.id, sid));
+  return (await ctx.db.select().from(simulationScenarios).where(eq(simulationScenarios.id, sid))).at(0)!;
+}
+route("POST", "/simulations/:id/scenarios", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const sim = await getScoped(ctx.db.select().from(simulations).where(eq(simulations.id, Number(params.id))), ctx.householdId, "Simulation");
+  const row = await saveScenario(ctx, sim, null, await body(req));
+  await ctx.db.update(simulations).set({ updated_at: new Date() }).where(eq(simulations.id, sim.id));
+  return json(row, 201);
+});
+route("PATCH", "/simulations/:id/scenarios/:sid", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const sim = await getScoped(ctx.db.select().from(simulations).where(eq(simulations.id, Number(params.id))), ctx.householdId, "Simulation");
+  const existing = await getScoped(ctx.db.select().from(simulationScenarios).where(eq(simulationScenarios.id, Number(params.sid))), ctx.householdId, "Scenario");
+  const row = await saveScenario(ctx, sim, existing.id, await body(req));
+  return json(row);
+});
+route("DELETE", "/simulations/:id/scenarios/:sid", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  await getScoped(ctx.db.select().from(simulations).where(eq(simulations.id, Number(params.id))), ctx.householdId, "Simulation");
+  const existing = await getScoped(ctx.db.select().from(simulationScenarios).where(eq(simulationScenarios.id, Number(params.sid))), ctx.householdId, "Scenario");
+  await ctx.db.delete(simulationScenarios).where(eq(simulationScenarios.id, existing.id));
+  return new Response(null, { status: 204 });
+});
+
+// Implement a scenario into the operational plan (§2.6, AC-009). Requires an
+// explicit target; never moves money — only creates a plan artefact.
+route("POST", "/simulations/:id/scenarios/:sid/implement", async (req, params) => {
+  const ctx = await requireAuth(req); requireWrite(ctx);
+  const sim = await getScoped(ctx.db.select().from(simulations).where(eq(simulations.id, Number(params.id))), ctx.householdId, "Simulation");
+  const scen = await getScoped(ctx.db.select().from(simulationScenarios).where(eq(simulationScenarios.id, Number(params.sid))), ctx.householdId, "Scenario");
+  const p = await body(req);
+  if (p.target === "goal") {
+    const [g] = await ctx.db.insert(goals).values({
+      household_id: ctx.householdId, name: p.name || sim.name, goal_type: p.goal_type ?? sim.simulation_type,
+      target_amount_cents: Number(p.target_amount_cents ?? 0), current_amount_cents: Number(p.current_amount_cents ?? 0),
+      target_date: p.target_date ?? null, monthly_contribution_cents: Number(p.monthly_contribution_cents ?? 0),
+      owner_member_id: p.owner_member_id ?? sim.owner_member_id ?? null, priority: p.priority ?? 3,
+      notes: `From simulation "${sim.name}" / scenario "${scen.scenario_name}".`,
+    }).returning();
+    await recordAudit(ctx.db, { action: "simulation.implemented", entity_type: "goal", entity_id: g.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: { simulation_id: sim.id, scenario_id: scen.id, target: "goal" } });
+    return json({ target: "goal", goal: enrichGoal(g) }, 201);
+  }
+  if (p.target === "budget_line") {
+    const period = await getScoped(ctx.db.select().from(budgetPeriods).where(eq(budgetPeriods.id, Number(p.period_id))), ctx.householdId, "Budget period");
+    if (LOCKED_STATUSES.has(period.status)) throw new HttpError(409, "Target period is locked");
+    const [line] = await ctx.db.insert(budgetLines).values({
+      period_id: period.id, household_id: ctx.householdId, category_id: Number(p.category_id),
+      item_name: p.item_name || sim.name, planned_amount_cents: Number(p.planned_amount_cents ?? 0),
+      owner_member_id: p.owner_member_id ?? sim.owner_member_id ?? null, due_day: p.due_day ?? null,
+      due_date: p.due_date ?? deriveDueDate(period, p.due_day), payment_type: p.payment_type ?? "manual", ...derivePaymentFlags(p.payment_type),
+      is_recurring: true, priority: p.priority ?? 3, notes: `From simulation "${sim.name}" / scenario "${scen.scenario_name}".`,
+    }).returning();
+    await recordAudit(ctx.db, { action: "simulation.implemented", entity_type: "budget_line", entity_id: line.id, household_id: ctx.householdId, actor_user_id: ctx.userId, detail: { simulation_id: sim.id, scenario_id: scen.id, target: "budget_line", period_id: period.id } });
+    return json({ target: "budget_line", line }, 201);
+  }
+  throw new HttpError(422, "Specify target: 'goal' or 'budget_line'.");
 });
 
 // ── Dashboard / reports / insights / copilot ─────────────────────────────────
