@@ -32,3 +32,28 @@ describe("asset optimise fallback", () => {
     expect(runSimulation("tax", { year: 2026, gross_annual_income_cents: 60_000_000 }).type).toBe("tax");
   });
 });
+
+describe("investment risk appetite drives the return", () => {
+  const common = { current_balance_cents: 1_000_000, monthly_contribution_cents: 200_000, months: 240 };
+
+  it("lower risk maps to a lower assumed return and a lower projected value", () => {
+    const low = runSimulation("investment", { ...common, risk_profile: "low" });
+    const high = runSimulation("investment", { ...common, risk_profile: "high" });
+    expect((low.detail as any).annual_return).toBeLessThan((high.detail as any).annual_return);
+    expect((low.detail as any).final_nominal_cents).toBeLessThan((high.detail as any).final_nominal_cents);
+  });
+
+  it("uses the central profile return when no explicit return is given", () => {
+    const low = runSimulation("investment", { ...common, risk_profile: "low" });
+    const med = runSimulation("investment", { ...common, risk_profile: "medium" });
+    const high = runSimulation("investment", { ...common, risk_profile: "high" });
+    expect((low.detail as any).annual_return).toBe(0.07);
+    expect((med.detail as any).annual_return).toBe(0.10);
+    expect((high.detail as any).annual_return).toBe(0.13);
+  });
+
+  it("an explicit return still overrides the profile", () => {
+    const r = runSimulation("investment", { ...common, risk_profile: "low", annual_return: 0.20 });
+    expect((r.detail as any).annual_return).toBe(0.20);
+  });
+});
