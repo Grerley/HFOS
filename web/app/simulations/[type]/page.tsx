@@ -38,6 +38,9 @@ export default function PlannerPage() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [implementFor, setImplementFor] = useState<AnyObj | null>(null);
   const [compareIds, setCompareIds] = useState<number[]>([]);
+  // Risk-appetite → expected-return map, sourced from the engine's central risk
+  // assumptions (falls back to sensible ZAR defaults until reference loads).
+  const [riskReturns, setRiskReturns] = useState<Record<string, number>>({ low: 0.07, medium: 0.10, high: 0.13 });
 
   const meta = isType(type) ? SIM_META[type] : null;
 
@@ -50,13 +53,26 @@ export default function PlannerPage() {
   useEffect(() => {
     if (!isType(type)) return;
     (async () => {
-      const [mem, per, cat, list] = await Promise.all([
+      const [mem, per, cat, list, ref] = await Promise.all([
         api.get<AnyObj[]>("/members").catch(() => []),
         api.get<AnyObj[]>("/budget-periods").catch(() => []),
         api.get<AnyObj[]>("/categories").catch(() => []),
         api.get<AnyObj[]>(`/simulations?type=${type}`).catch(() => []),
+        api.get<AnyObj>("/simulations/reference").catch(() => null),
       ]);
       setMembers(mem); setPeriods(per); setCategories(cat); setSims(list);
+      if (ref?.risk_profiles) {
+        const rr: Record<string, number> = {};
+        for (const [k, v] of Object.entries<any>(ref.risk_profiles)) rr[k] = v.expected_return;
+        setRiskReturns(rr);
+        // Sync the return field to the current risk profile on first load.
+        if (type === "investment") {
+          setInputs((cur) => {
+            const r = rr[cur.risk_profile];
+            return r != null ? { ...cur, annual_return: String(Math.round(r * 1000) / 10) } : cur;
+          });
+        }
+      }
       if (list.length) { setActiveSim(list[0]); await loadScenarios(list[0].id); }
       setReady(true);
     })();
@@ -91,7 +107,17 @@ export default function PlannerPage() {
     return null;
   }
 
-  const set = (k: string, v: string) => setInputs((cur) => ({ ...cur, [k]: v }));
+  const set = (k: string, v: string) => setInputs((cur) => {
+    const next = { ...cur, [k]: v };
+    // Risk appetite drives the expected return (low ≈ 7%, medium ≈ 10%, high ≈
+    // 13%) for realistic projections. The user can still override the return
+    // afterwards under advanced assumptions; changing risk again re-syncs it.
+    if (k === "risk_profile" && type === "investment") {
+      const r = riskReturns[v];
+      if (r != null) next.annual_return = String(Math.round(r * 1000) / 10);
+    }
+    return next;
+  });
 
   function loadScenarioInputs(s: AnyObj) {
     if (!isType(type)) return;
@@ -287,7 +313,7 @@ function InvestmentResult({ r, money }: { r: AnyObj; money: (c: number) => strin
         <StatCard label="Contributions" value={money(d.contributions_cents)} />
         <StatCard label="Investment growth" value={money(d.net_return_cents)} tone="positive" hint={`fees ${money(d.fees_cents)}`} />
       </div>
-      <Card title="Portfolio growth" subtitle="Value vs contributions over time">
+      <Card title="Portfolio growth" subtitle={`Value vs contributions · assumed return ${formatPercent(d.annual_return)}${d.risk_profile ? ` (${d.risk_profile} risk)` : ""}, fees ${formatPercent(d.annual_fees)}`}>
         {series[0].values.length > 0 && <ScenarioChart months={series[0].values.length} series={series as any} format={money} height={260} />}
       </Card>
       {goal && (

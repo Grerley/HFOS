@@ -50,7 +50,7 @@ export const FIELDS: Record<SimType, FieldDef[]> = {
     { key: "current_balance_cents", label: "Current balance", kind: "money", def: "0", group: "essential" },
     { key: "monthly_contribution_cents", label: "Monthly contribution", kind: "money", def: "2000", group: "essential" },
     { key: "months", label: "Investment period (months)", kind: "months", def: "120", group: "essential" },
-    { key: "risk_profile", label: "Risk appetite", kind: "select", def: "medium", options: RISK_OPTS, group: "essential", help: "Sets the expected return unless you override it below." },
+    { key: "risk_profile", label: "Risk appetite", kind: "select", def: "medium", options: RISK_OPTS, group: "essential", help: "Drives the expected return: low ≈ 7%, medium ≈ 10%, high ≈ 13%. Override under advanced assumptions if needed." },
     { key: "target_amount_cents", label: "Target amount (optional)", kind: "money", def: "0", group: "essential", help: "Set a target to see the contribution / time / return needed." },
     { key: "lump_sum_cents", label: "Initial lump sum", kind: "money", def: "0", group: "advanced", adv: true },
     { key: "annual_return", label: "Expected annual return %", kind: "percent", def: "10", group: "advanced", adv: true, help: "Overrides the risk-profile return." },

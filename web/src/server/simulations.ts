@@ -81,7 +81,7 @@ function runInvestment(a: Record<string, unknown>): RunResult {
     ? sim.affordabilityStatus(input.monthly_contribution_cents, netIncome)
     : null;
 
-  const detail = { ...fv, goal, affordability: afford, target_amount_cents: target || null, risk_profile: riskProfile };
+  const detail = { ...fv, goal, affordability: afford, target_amount_cents: target || null, risk_profile: riskProfile, annual_return: input.annual_return, annual_fees: input.annual_fees };
   const summary = {
     final_nominal_cents: fv.final_nominal_cents,
     final_real_cents: fv.final_real_cents,
