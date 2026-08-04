@@ -28,6 +28,7 @@ const NAV: NavEntry[] = [
       { href: "/property", label: "Property", icon: "⌂" },
       { href: "/goals", label: "Goals", icon: "◎" },
       { href: "/scenarios", label: "Scenarios", icon: "⟿" },
+      { href: "/simulations", label: "Simulations", icon: "⚗" },
     ],
   },
   { href: "/copilot", label: "Insights", icon: "✦" },
