@@ -25,8 +25,9 @@ const LLM_TIMEOUT_MS = 9000;
 // deprecated "@cf/meta/llama-3.1-8b-instruct" and is cheaper + faster.
 const DEFAULT_WORKERS_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8-fast";
 // Claude via Cloudflare AI Gateway (Unified Billing, no key). Cloudflare's
-// catalog uses dotted names; bump this as newer Claude models are listed.
-const DEFAULT_AI_GATEWAY_MODEL = "anthropic/claude-sonnet-4.5";
+// catalog uses the author/model form; bump this as newer Claude models are
+// listed. claude-sonnet-5 is Anthropic's current agentic Sonnet (1M context).
+const DEFAULT_AI_GATEWAY_MODEL = "anthropic/claude-sonnet-5";
 // Direct Anthropic API (needs ANTHROPIC_API_KEY).
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
 const DEFAULT_AI_GATEWAY_ID = "default";
