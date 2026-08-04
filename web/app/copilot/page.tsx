@@ -63,6 +63,11 @@ export default function CopilotPage() {
         {turns.map((t, i) => (
           <Card key={i}>
             <p className="text-sm font-semibold text-ink">{t.q}</p>
+            {t.degraded && (
+              <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                ⚠ The AI copilot couldn’t be reached, so this is a built-in rule-based answer (figures are still exact). If this persists, check the AI provider in Settings.
+              </p>
+            )}
             <p className="mt-2 text-sm text-ink-soft">{t.a}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Badge tone="info">{PROVIDER_LABEL[t.provider] ?? t.provider}</Badge>
